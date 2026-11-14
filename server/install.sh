@@ -157,7 +157,7 @@ check "spectrum (Barnard)"       "$B/api/v1/spectrum?ra=269.4521&dec=4.6934" 290
 
 # lectura directa del bucket de AWS, sin caches (las pruebas de arriba pueden salir de Redis/Nginx)
 echo "  Lectura directa de AWS S3 (3 recortes de Barnard, sin cache):"
-curl -s --max-time 120 "http://127.0.0.1:8000/api/v1/source/test?ra=269.4521&dec=4.6934&n=3" | /opt/spherex-env/bin/python -c '
+curl -s --max-time 280 "http://127.0.0.1:8000/api/v1/source/test?ra=269.4521&dec=4.6934&n=3&compare=true" | /opt/spherex-env/bin/python -c '
 import json, sys
 try:
     rs = json.load(sys.stdin)["results"]
@@ -165,7 +165,7 @@ except Exception as e:
     print("    FALLO  no se pudo ejecutar la prueba:", e); sys.exit(0)
 for r in rs:
     if r.get("ok"):
-        print("    OK     %ss  %sx%s px  lambda=%s um  validos=%s" % (r["seconds"], r["shape"][1], r["shape"][0], r.get("wavelength"), r.get("finite_fraction")))
+        print("    OK     S3 1a vez %ss, despues %ss | IRSA %ss | %sx%s px  lambda=%.3f um" % (r["seconds"], r.get("seconds_again"), r.get("irsa_seconds"), r["shape"][1], r["shape"][0], r.get("wavelength") or 0))
     else:
         print("    FALLO  %ss  %s" % (r["seconds"], r.get("error")))
         print("           " + str(r.get("s3_url")))

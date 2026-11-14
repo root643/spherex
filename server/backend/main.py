@@ -388,22 +388,35 @@ def _source_stats() -> dict:
 
 
 @app.get("/api/v1/source/test")
-def source_test(ra: float = RA, dec: float = DEC, n: int = Query(3, ge=1, le=8)):
+def source_test(ra: float = RA, dec: float = DEC, n: int = Query(3, ge=1, le=8),
+                compare: bool = Query(False, description="medir tambien el mismo recorte en IRSA")):
     """Diagnostico: lee n recortes directamente del bucket S3, sin cache de matrices,
-    y dice cuanto tarda cada uno o por que falla."""
+    y dice cuanto tarda cada uno o por que falla. Cada recorte se lee dos veces: la
+    primera incluye leer las cabeceras del fichero (solo pasa una vez por imagen) y
+    la segunda es lo que cuesta despues. Con compare=true mide ademas IRSA."""
     ra, dec = _r(ra, dec)
     exps = imaging.sample_evenly(get_exposures(ra, dec), n)
+    size_deg = 0.1
     out = []
     for e in exps:
-        t0 = time.time()
         item = {"uri": e["uri"], "s3_url": upstream.s3_url(e["uri"])}
-        try:
-            c = upstream.s3_cutout(e["uri"], ra, dec, 0.1)
-            item.update(ok=True, shape=list(c["image"].shape), wavelength=c["wavelength"],
-                        finite_fraction=round(float(np.isfinite(c["image"]).mean()), 3))
-        except Exception as ex:
-            item.update(ok=False, error=f"{type(ex).__name__}: {ex}"[:400])
-        item["seconds"] = round(time.time() - t0, 3)
+        for label in ("seconds", "seconds_again"):
+            t0 = time.time()
+            try:
+                c = upstream.s3_cutout(e["uri"], ra, dec, size_deg)
+                item.update(ok=True, shape=list(c["image"].shape), wavelength=c["wavelength"],
+                            finite_fraction=round(float(np.isfinite(c["image"]).mean()), 3))
+            except Exception as ex:
+                item.update(ok=False, error=f"{type(ex).__name__}: {ex}"[:400])
+            item[label] = round(time.time() - t0, 3)
+        if compare:
+            t0 = time.time()
+            try:
+                r = upstream._session.get(upstream.cutout_url(e["uri"], ra, dec, size_deg), timeout=(10, 90))
+                item["irsa_status"], item["irsa_bytes"] = r.status_code, len(r.content)
+            except Exception as ex:
+                item["irsa_error"] = f"{type(ex).__name__}: {ex}"[:200]
+            item["irsa_seconds"] = round(time.time() - t0, 3)
         out.append(item)
     return JSONResponse({"mode": upstream.SOURCE, "results": out}, headers={"Cache-Control": "no-store"})
 
