@@ -82,6 +82,17 @@ class Cache:
             while len(self._local) > self._max:
                 self._local.popitem(last=False)
 
+    def incr(self, key: str) -> None:
+        """Contador. En Redis es atomico y lo comparten los 4 workers."""
+        if self._r is not None:
+            try:
+                self._r.incr(key)
+                return
+            except Exception:
+                pass
+        with self._lock:
+            self._local[key] = str(int(self._local.get(key) or 0) + 1).encode()
+
     def info(self) -> dict:
         if self._r is None:
             return {"backend": "memoria-local", "items": len(self._local)}

@@ -10,7 +10,7 @@ En PowerShell, dentro de esta carpeta:
 powershell -ExecutionPolicy Bypass -File .\deploy.ps1
 ```
 
-El script detecta el usuario SSH (`ubuntu`/`opc`/`root`), sube `server/` y ejecuta `server/install.sh` con sudo. Al acabar lanza pruebas de humo contra IRSA y deja la web en `http://51.170.50.113/`. Se puede relanzar para actualizar.
+El script detecta el usuario SSH (`ubuntu`/`opc`/`root`), sube `server/` y ejecuta `server/install.sh` con sudo. Al acabar lanza pruebas de humo contra los datos reales (indica cuántos recortes han salido de AWS S3 y cuántos de IRSA) y deja la web en `http://51.170.50.113/`. Se puede relanzar para actualizar.
 
 Si la web no abre desde fuera, falta la regla de entrada TCP 80 en la *Security List* de la VCN de Oracle Cloud (eso solo se cambia en la consola de Oracle).
 
@@ -33,10 +33,11 @@ Si la web no abre desde fuera, falta la regla de entrada TCP 80 en la *Security 
 | --- | --- |
 | `GET /api/v1/targets/search?q=` | Benchmark local → «RA Dec» → CDS Sesame |
 | `GET /api/v1/observations?ra=&dec=` | Épocas de SPHEREx que cubren la posición (TAP de IRSA) |
-| `GET /api/v1/cutout/frame?ra=&dec=&fov=&epoch=&band=&stretch=&invert=&diff=&ref=&vmin=&vmax=` | Fotograma WebP reproyectado a TAN (N arriba, E izquierda). `diff=true` resta la época `ref` |
+| `GET /api/v1/cutout/frame?ra=&dec=&fov=&epoch=&band=&stretch=&invert=&diff=&ref=&vmin=&vmax=&res=` | Fotograma WebP reproyectado a TAN (N arriba, E izquierda). `diff=true` resta la época `ref`. `res=low` saca la versión rápida de baja resolución (rejilla nativa) para precarga |
 | `GET /api/v1/cutout/coadd?ra=&dec=&fov=&band=&stretch=&method=` | Coadición (mediana o media) de todas las épocas |
+| `GET /api/v1/cutout/prewarm?ra=&dec=&fov=&band=` | Encola en segundo plano la construcción de todas las épocas de esa banda (sin esperarla) |
 | `GET /api/v1/spectrum?ra=&dec=` | Fotometría de apertura → 102 canales (µJy) + profundidad de hielo de agua y CO₂ |
-| `GET /api/v1/cache/stats` | Redis y caché de disco |
+| `GET /api/v1/cache/stats` | Redis, caché de disco y origen de los recortes (`source`: cuántos de S3, cuántos de IRSA y el último error de S3) |
 | `GET /api/docs` | Documentación interactiva |
 
 `fov` va en segundos de arco (60–1800). `band` es `D1`…`D6` (detector completo) o `ch1`…`ch102` (canal fino). Los fotogramas devuelven cabeceras `X-Spherex-*` (límites de escala, nº de exposiciones, fecha, λ media, escala).
@@ -44,17 +45,35 @@ Si la web no abre desde fuera, falta la regla de entrada TCP 80 en la *Security 
 ## Cómo procesa los datos
 
 1. **Épocas.** SPHEREx no publica «una imagen por banda y época»: cada exposición ve el punto a una longitud de onda distinta. El servidor pide por TAP todas las exposiciones que contienen la posición y las agrupa en épocas por huecos de más de 20 días (y en ventanas de 60 días donde la cobertura es continua, cerca de los polos eclípticos).
-2. **Fotograma.** Para la época y el detector pedidos descarga los recortes MEF de IRSA (hasta 16), resta `ZODI`, enmascara con `FLAGS`, reproyecta cada uno con su WCS TAN-SIP a una rejilla TAN común de 3,075″/px y toma la mediana.
+2. **Fotograma.** Para la época y el detector pedidos lee los recortes (hasta 16) del bucket público de AWS, resta `ZODI`, enmascara con `FLAGS`, reproyecta cada uno con su WCS TAN-SIP a una rejilla TAN común de 3,075″/px y toma la mediana.
 3. **Diferencia / coadición.** Resta de dos fotogramas ya alineados (dipolo = movimiento, monopolo = variabilidad) o mediana de todas las épocas.
 4. **Espectro.** Apertura de 2 px con anillo de fondo en hasta 24 exposiciones por detector; la longitud de onda sale del WCS espectral (`WCS-WAVE`) de cada recorte.
+
+## De dónde salen las imágenes: AWS S3
+
+Las imágenes se leen del bucket público `nasa-irsa-spherex` (AWS, `us-east-1`, sin cuenta ni credenciales), no del servicio de recortes de IRSA. IRSA sigue usándose para la consulta TAP (qué exposiciones cubren la posición) y como respaldo.
+
+- La ruta en S3 sale de la URL de IRSA: `…/ibe/data/spherex/dr1/level2/…fits` → `https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/dr1/level2/…fits`.
+- No se baja la imagen entera (decenas de MB). Con peticiones HTTP `Range` se leen solo las cabeceras (una vez por imagen; quedan en `/var/cache/spherex/fits/layout`) y las filas del recorte de `IMAGE`, `ZODI` y `VARIANCE`. `FLAGS` viene comprimido y se trae entero (queda en `…/flags`); la tabla `WCS-WAVE` queda en `…/wave`.
+- Las lecturas de una misma imagen van en paralelo, y `VARIANCE` solo se pide para el espectro.
+- Si una imagen no está en el bucket o la lectura falla, ese recorte se pide a IRSA. Tras 12 fallos seguidos de S3 se deja de intentar durante 10 minutos.
+
+Variables de entorno (en `/etc/systemd/system/spherex.service`):
+
+| Variable | Valor por defecto | Función |
+| --- | --- | --- |
+| `SPHEREX_SOURCE` | `s3` | `s3` (S3 con respaldo de IRSA), `irsa` (solo IRSA) o `s3only` (sin respaldo, para diagnosticar) |
+| `SPHEREX_S3_BASE` | `https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/` | Base del bucket |
+| `SPHEREX_S3_THREADS` | `48` | Lecturas `Range` simultáneas |
 
 ## Pruebas
 
 ```bash
 python3 tests/test_imaging.py
+python3 tests/test_s3fits.py
 ```
 
-Cubre la aritmética de imágenes (apilado, máscaras, dipolo, estirado, WebP, fotometría, canales, épocas). La parte que habla con IRSA (TAP, recortes, astropy/reproject) solo se puede comprobar en el servidor: lo hacen las pruebas de humo del instalador.
+`test_imaging.py` cubre la aritmética de imágenes (apilado, máscaras, dipolo, estirado, WebP, fotometría, canales, épocas). `test_s3fits.py` cubre la lectura parcial de FITS por rangos contra un fichero sintético con la estructura de un level2. La parte que habla con AWS e IRSA (TAP, recortes reales, astropy/reproject) solo se puede comprobar en el servidor: lo hacen las pruebas de humo del instalador.
 
 ## Limitaciones conocidas
 

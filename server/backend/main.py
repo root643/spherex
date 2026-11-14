@@ -9,12 +9,13 @@ import hashlib
 import json
 import os
 import shutil
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 import numpy as np
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 
 import imaging
@@ -26,13 +27,13 @@ VERSION = "1.0.0"
 MAX_PER_FRAME = int(os.environ.get("SPHEREX_MAX_PER_FRAME", "16"))
 MAX_PER_COADD = int(os.environ.get("SPHEREX_MAX_PER_COADD", "48"))
 MAX_SPEC_PER_DET = int(os.environ.get("SPHEREX_MAX_SPEC_PER_DET", "24"))
-TTL_OBS = 3600            # los metadatos cambian cuando IRSA publica datos nuevos
+TTL_OBS = 24 * 86400      # los metadatos de IRSA solo cambian cuando publica datos nuevos
 TTL_ARR = 14 * 86400
 
 app = FastAPI(title="SPHEREx WiseView Translation Server", version=VERSION,
               docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
 cache = Cache()
-pool = ThreadPoolExecutor(max_workers=int(os.environ.get("SPHEREX_FETCH_THREADS", "8")))
+pool = ThreadPoolExecutor(max_workers=int(os.environ.get("SPHEREX_FETCH_THREADS", "16")))
 
 RA = Query(..., ge=0, lt=360, description="Ascension recta J2000 (grados)")
 DEC = Query(..., ge=-90, le=90, description="Declinacion J2000 (grados)")
@@ -84,13 +85,16 @@ def summarize_epochs(exps: list[dict]) -> list[dict]:
 
 # --------------------------------------------------------------------------- construccion de matrices
 def build_array(ra: float, dec: float, fov: float, det: int, lmin: float | None, lmax: float | None,
-                exps: list[dict], method: str, cap: int) -> tuple[np.ndarray, dict]:
+                exps: list[dict], method: str, cap: int, res: str = "high") -> tuple[np.ndarray, dict]:
     """Descarga, limpia, reproyecta y apila los exposures dados. Cache en Redis."""
     exps = [e for e in exps if e["detector"] == det]
     exps = imaging.sample_evenly(exps, cap if lmin is None else max(cap, 40))
     if not exps:
         raise HTTPException(404, f"No hay imagenes de SPHEREx en D{det} para esa posicion/epoca")
-    n, scale = upstream.grid_for(fov)
+    if res == "low":
+        n, scale = upstream.grid_for(fov, min_scale=upstream.NATIVE_SCALE)
+    else:
+        n, scale = upstream.grid_for(fov)
     key = "arr:" + _hash(ra, dec, fov, det, lmin, lmax, method, n, ",".join(e["obs"] for e in exps))
     raw, meta_raw = cache.get(key), cache.get(key + ":m")
     if raw and meta_raw:
@@ -101,8 +105,7 @@ def build_array(ra: float, dec: float, fov: float, det: int, lmin: float | None,
     size_deg = (fov * 1.5 + 4 * upstream.NATIVE_SCALE) / 3600.0
 
     def one(e: dict):
-        data = upstream.fetch(upstream.cutout_url(e["uri"], ra, dec, size_deg))
-        exp = upstream.read_cutout(data, ra, dec)
+        exp = upstream.load_cutout(e["uri"], ra, dec, size_deg, need_var=False)
         wl = exp["wavelength"]
         if lmin is not None and (wl is None or not lmin <= wl < lmax):
             return None
@@ -112,22 +115,22 @@ def build_array(ra: float, dec: float, fov: float, det: int, lmin: float | None,
     frames, wls, mjds, errors = [], [], [], []
     for fut in [pool.submit(one, e) for e in exps]:
         try:
-            res = fut.result()
+            r = fut.result()
         except Exception as ex:  # un exposure roto no tumba el fotograma
             errors.append(str(ex))
             continue
-        if res is not None:
-            frames.append(res[0])
-            if res[1] is not None:
-                wls.append(res[1])
-            mjds.append(res[2])
+        if r is not None:
+            frames.append(r[0])
+            if r[1] is not None:
+                wls.append(r[1])
+            mjds.append(r[2])
     if not frames:
         if errors:
-            raise HTTPException(502, f"IRSA no devolvio recortes validos ({errors[0]})")
+            raise HTTPException(502, f"No llegaron recortes validos de S3 ni de IRSA ({errors[0]})")
         raise HTTPException(404, "Sin datos validos en esa banda/canal para esa epoca")
 
     arr = imaging.stack(frames, method)
-    meta = {"n": len(frames), "size": n, "scale": round(scale, 4),
+    meta = {"n": len(frames), "size": n, "scale": round(scale, 4), "res": res,
             "wavelength": round(float(np.mean(wls)), 4) if wls else None,
             "mjd": round(float(np.mean(mjds)), 3), "date": imaging.mjd_to_iso(float(np.mean(mjds))),
             "failed": len(errors)}
@@ -155,7 +158,7 @@ def _image_response(arr: np.ndarray, meta: dict, stretch: str, invert: bool, dif
         "X-Spherex-Vmin": f"{vmin:.6g}", "X-Spherex-Vmax": f"{vmax:.6g}",
         "X-Spherex-N": str(meta["n"]), "X-Spherex-Date": str(meta["date"]),
         "X-Spherex-Mjd": str(meta["mjd"]), "X-Spherex-Scale": str(meta["scale"]),
-        "X-Spherex-Size": str(meta["size"]),
+        "X-Spherex-Size": str(meta["size"]), "X-Spherex-Res": meta.get("res", "high"),
         "X-Spherex-Wavelength": "" if meta["wavelength"] is None else str(meta["wavelength"]),
     }
     return Response(body, media_type="image/webp", headers=headers)
@@ -214,15 +217,19 @@ def cutout_frame(ra: float = RA, dec: float = DEC, fov: float = FOV,
                  epoch: int = Query(0, ge=0), band: str = Query("D4"),
                  stretch: str = Query("asinh"), invert: bool = False,
                  diff: bool = False, ref: int = Query(0, ge=0),
+                 res: str = Query("high", pattern="^(low|high)$"),
                  vmin: Optional[float] = None, vmax: Optional[float] = None):
-    """Fotograma de una epoca (o diferencia epoca - ref), reproyectado y estirado, en WebP."""
+    """Fotograma de una epoca (o diferencia epoca - ref), reproyectado y estirado, en WebP.
+    res=low saca la version de baja resolucion (rejilla nativa) para vista rapida."""
     ra, dec = _r(ra, dec)
     fov = float(round(fov))
     det, lmin, lmax = _band(band)
     exps = get_exposures(ra, dec)
-    arr, meta = build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, epoch), "median", MAX_PER_FRAME)
+    arr, meta = build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, epoch), "median",
+                            MAX_PER_FRAME, res)
     if diff:
-        ref_arr, _ = build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, ref), "median", MAX_PER_FRAME)
+        ref_arr, _ = build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, ref), "median",
+                                 MAX_PER_FRAME, res)
         arr = arr - ref_arr
     return _image_response(arr, meta, stretch, invert, diff, vmin, vmax)
 
@@ -231,13 +238,59 @@ def cutout_frame(ra: float = RA, dec: float = DEC, fov: float = FOV,
 def cutout_coadd(ra: float = RA, dec: float = DEC, fov: float = FOV, band: str = Query("D4"),
                  stretch: str = Query("asinh"), invert: bool = False,
                  method: str = Query("median", pattern="^(median|mean)$"),
+                 res: str = Query("high", pattern="^(low|high)$"),
                  vmin: Optional[float] = None, vmax: Optional[float] = None):
     """Coadicion temporal de todas las epocas."""
     ra, dec = _r(ra, dec)
     fov = float(round(fov))
     det, lmin, lmax = _band(band)
-    arr, meta = build_array(ra, dec, fov, det, lmin, lmax, get_exposures(ra, dec), method, MAX_PER_COADD)
+    arr, meta = build_array(ra, dec, fov, det, lmin, lmax, get_exposures(ra, dec), method,
+                            MAX_PER_COADD, res)
     return _image_response(arr, meta, stretch, invert, False, vmin, vmax)
+
+
+# --------------------------------------------------------------------------- prewarm
+_prewarming: set[tuple] = set()
+_prewarm_lock = threading.Lock()
+
+
+def _prewarm_epoch(ra: float, dec: float, fov: float, det: int, lmin: float | None,
+                   lmax: float | None, epoch: int, token: tuple) -> None:
+    """Construye en segundo plano el array de una epoca (queda en Redis)."""
+    try:
+        exps = get_exposures(ra, dec)
+        build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, epoch), "median", MAX_PER_FRAME)
+    except Exception:
+        pass  # el prewarm es oportunista: los errores los contaran las peticiones normales
+    finally:
+        with _prewarm_lock:
+            _prewarming.discard(token)
+
+
+@app.get("/api/v1/cutout/prewarm")
+def cutout_prewarm(background_tasks: BackgroundTasks, ra: float = RA, dec: float = DEC,
+                   fov: float = FOV, band: str = Query("D4")):
+    """Encola la construccion de todas las epocas de esa banda sin esperar a que acaben.
+
+    El cliente lo llama justo despues de /observations: mientras mira los primeros
+    fotogramas el resto de epocas se van construyendo y las peticiones posteriores
+    caen en Redis.
+    """
+    ra, dec = _r(ra, dec)
+    fov = float(round(fov))
+    det, lmin, lmax = _band(band)
+    exps = get_exposures(ra, dec)
+    enqueued = 0
+    for epoch in sorted({e["epoch"] for e in exps}):
+        token = (ra, dec, fov, det, epoch)
+        with _prewarm_lock:
+            if token in _prewarming:
+                continue
+            _prewarming.add(token)
+        background_tasks.add_task(_prewarm_epoch, ra, dec, fov, det, lmin, lmax, epoch, token)
+        enqueued += 1
+    return JSONResponse({"status": "ok", "band": band, "epochs": enqueued},
+                        headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/v1/spectrum")
@@ -258,7 +311,7 @@ def spectrum(ra: float = RA, dec: float = DEC):
     size_deg = 24 * upstream.NATIVE_SCALE / 3600.0
 
     def one(e: dict):
-        exp = upstream.read_cutout(upstream.fetch(upstream.cutout_url(e["uri"], ra, dec, size_deg)), ra, dec)
+        exp = upstream.load_cutout(e["uri"], ra, dec, size_deg)
         if exp["wavelength"] is None:
             return None
         ph = imaging.aperture_photometry(exp["image"], exp["variance"], exp["x"], exp["y"])
@@ -313,7 +366,29 @@ def _disk_stats() -> dict:
     return _disk["v"]
 
 
+def _report_source(kind: str, detail: str | None = None) -> None:
+    cache.incr("stat:src:" + kind)
+    if detail and kind != "s3":
+        cache.set("stat:src:last:" + kind, detail.encode(), 7 * 86400)
+
+
+upstream.report = _report_source
+
+
+def _source_stats() -> dict:
+    """De donde han salido los recortes: bucket S3 de AWS o servicio de recortes de IRSA."""
+    out: dict = {"mode": upstream.SOURCE, "s3_base": upstream.S3_BASE}
+    for kind in ("s3", "irsa", "s3_missing", "s3_error"):
+        out[kind] = int(cache.get("stat:src:" + kind) or 0)
+    for kind in ("s3_missing", "s3_error"):
+        last = cache.get("stat:src:last:" + kind)
+        if last:
+            out["last_" + kind] = last.decode("utf-8", "replace")
+    return out
+
+
 @app.get("/api/v1/cache/stats")
 def cache_stats():
-    return JSONResponse({"version": VERSION, "redis": cache.info(), "disk": _disk_stats()},
+    return JSONResponse({"version": VERSION, "redis": cache.info(), "disk": _disk_stats(),
+                         "source": _source_stats()},
                         headers={"Cache-Control": "no-store"})

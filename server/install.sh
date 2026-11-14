@@ -155,6 +155,20 @@ check "observations (Barnard)"   "$B/api/v1/observations?ra=269.4521&dec=4.6934"
 check "frame WebP (Barnard, D2)" "$B/api/v1/cutout/frame?ra=269.4521&dec=4.6934&fov=240&epoch=0&band=D2" 280
 check "spectrum (Barnard)"       "$B/api/v1/spectrum?ra=269.4521&dec=4.6934" 290
 
+# de donde han salido los recortes: lo normal es s3 > 0 e irsa = 0
+echo "  Origen de los recortes (s3 = bucket de AWS, irsa = respaldo):"
+curl -s --max-time 10 "$B/api/v1/cache/stats" | /opt/spherex-env/bin/python -c '
+import json, sys
+try:
+    s = json.load(sys.stdin)["source"]
+except Exception as e:
+    print("    no se pudo leer:", e); sys.exit(0)
+print("    modo=%s  s3=%s  irsa=%s  s3_missing=%s  s3_error=%s" % tuple(s.get(k) for k in ("mode", "s3", "irsa", "s3_missing", "s3_error")))
+for k in ("last_s3_error", "last_s3_missing"):
+    if s.get(k): print("    %s: %s" % (k, s[k]))
+if not s.get("s3"): print("    AVISO: ningun recorte ha salido de S3; se esta usando IRSA (mas lento)")
+' || true
+
 if [ "$FAIL" -ne 0 ]; then
   say "Algun chequeo ha fallado. Ultimas lineas del servicio:"
   journalctl -u spherex.service -n 60 --no-pager || true

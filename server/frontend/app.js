@@ -209,6 +209,10 @@
       const obs = await getJson(`${API}/observations?ra=${state.ra}&dec=${state.dec}`);
       if (token !== loadToken) return;
       epochs = obs.epochs;
+      // encolar la construccion de todas las epocas en el servidor: las peticiones
+      // de fotogramas que vengan despues caeran en Redis en vez de reproyectar en frio
+      fetch(`${API}/cutout/prewarm?ra=${state.ra}&dec=${state.dec}&fov=${state.fov}&band=${"D" + detOf(state.band)}`)
+        .catch(() => {});
       const det = "D" + detOf(state.band);
       [...$("bands").children].forEach((b) => (b.disabled = !(obs.detectors["D" + b.dataset.det] > 0)));
       const usable = epochs.filter((e) => e.detectors[det] > 0);
@@ -229,32 +233,69 @@
       }
       syncUrl();
 
-      let done = 0;
-      const progress = () => setMsg(`Reproyectando épocas… ${done}/${jobs.length} (la primera vez tarda; después va desde caché)`);
+      // ---- carga progresiva: primero baja resolucion (se ensena segun llega),
+      // ---- despues alta resolucion en segundo plano reemplazando cada fotograma
+      let done = 0, failed = 0, showing = false;
+      const progress = () => setMsg(done < jobs.length - failed
+        ? `Épocas listas: ${done}/${jobs.length - failed} (la primera vez tarda; después va desde caché)` : "");
       progress();
-      let res = await mapLimit(jobs, 3, async (j) => { const f = await fetchFrame(frameUrl(j.kind, j.extra)); done++; if (token === loadToken) progress(); return f; });
-      if (token !== loadToken) return res.forEach((f) => f.url && URL.revokeObjectURL(f.url));
-      let ok = jobs.map((j, i) => ({ ...j, ...res[i] })).filter((f) => !f.error);
-      const firstErr = res.find((f) => f.error);
-      if (!ok.length) return setMsg(firstErr ? firstErr.error.message : "Sin datos.", true);
 
-      // segunda pasada: misma escala de grises para todas las epocas
-      if (state.common && ok.length > 1) {
-        const vmin = Math.min(...ok.map((f) => f.meta.vmin)), vmax = Math.max(...ok.map((f) => f.meta.vmax));
-        const res2 = await mapLimit(ok, 4, (f) => fetchFrame(frameUrl(f.kind, { ...f.extra, vmin, vmax })));
-        if (token !== loadToken) return;
-        ok = ok.map((f, i) => {
-          if (res2[i].error) return f;
-          URL.revokeObjectURL(f.url);
-          return { ...f, url: res2[i].url, meta: res2[i].meta };
-        });
+      const byIdx = new Map();   // indice del job -> fotograma
+      const rebuild = () => {
+        frames = jobs.map((j, k) => {
+          const f = byIdx.get(k);
+          return f ? { ...j, idx0: k, ...f } : null;
+        }).filter(Boolean);
+        if (!frames.length) return;
+        $("scrub").max = frames.length - 1;
+      };
+      const applyFrame = (i, f) => {
+        if (token !== loadToken) { if (f.url) URL.revokeObjectURL(f.url); return; }
+        if (f.error) failed++; else byIdx.set(i, f);
+        done++;
+        rebuild();
+        progress();
+        if (!showing) {
+          showing = true;
+          show(0);
+          if (frames.length > 1) play(); else pause(true);
+        } else if (frames.length > 1 && playing) {
+          play();   // rearma el temporizador al llegar mas epocas
+        }
+      };
+      const replaceFrame = (i, g) => {
+        if (token !== loadToken) { if (g.url) URL.revokeObjectURL(g.url); return; }
+        const old = byIdx.get(i);
+        byIdx.set(i, g);
+        rebuild();
+        if (old) URL.revokeObjectURL(old.url);
+        if (frames[idx] && frames[idx].idx0 === i) show(idx);
+      };
+
+      // fase 1: baja resolucion
+      await mapLimit(jobs, 6, async (j, i) => {
+        try {
+          applyFrame(i, await fetchFrame(frameUrl(j.kind, { ...j.extra, res: "low" })));
+        } catch (e) { applyFrame(i, { error: e }); }
+      });
+      if (token !== loadToken) return;
+      const lows = [...byIdx.entries()].sort((a, b) => a[0] - b[0]).map(([, f]) => f);
+      if (!lows.length) return setMsg("Sin datos válidos en esta banda para esta posición.", true);
+      setMsg(failed ? `${failed} época(s) sin datos válidos.` : "");
+
+      // escala de grises comun para todas las epocas (se aplica al pedir la alta resolucion)
+      let lim = {};
+      if (state.common && lows.length > 1) {
+        lim = { vmin: Math.min(...lows.map((f) => f.meta.vmin)), vmax: Math.max(...lows.map((f) => f.meta.vmax)) };
       }
-      frames = ok;
-      grid = { size: frames[0].meta.size, scale: frames[0].meta.scale };
-      $("scrub").max = frames.length - 1;
-      setMsg(ok.length < jobs.length ? `${jobs.length - ok.length} época(s) sin datos válidos.` : "");
-      show(0);
-      if (frames.length > 1) play(); else pause(true);
+
+      // fase 2 (sin esperar): alta resolucion, cada fotograma sustituye a su version baja
+      mapLimit(lows, 4, async (f, i) => {
+        if (token !== loadToken) return;
+        try {
+          replaceFrame(f.idx0, await fetchFrame(frameUrl(f.kind, { ...f.extra, ...lim })));
+        } catch { /* se conserva la baja resolucion */ }
+      });
     } catch (e) {
       if (token === loadToken) setMsg(e.message, true);
     }
@@ -283,6 +324,7 @@
     if (!frames.length) return;
     idx = (k + frames.length) % frames.length;
     const f = frames[idx];
+    grid = { size: f.meta.size, scale: f.meta.scale };   // la geometria sigue al fotograma mostrado
     $("img").src = f.url;
     $("scrub").value = idx;
     $("frameLabel").textContent = `${idx + 1}/${frames.length} · ${f.label}`;
