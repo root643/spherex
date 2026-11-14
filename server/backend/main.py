@@ -387,6 +387,27 @@ def _source_stats() -> dict:
     return out
 
 
+@app.get("/api/v1/source/test")
+def source_test(ra: float = RA, dec: float = DEC, n: int = Query(3, ge=1, le=8)):
+    """Diagnostico: lee n recortes directamente del bucket S3, sin cache de matrices,
+    y dice cuanto tarda cada uno o por que falla."""
+    ra, dec = _r(ra, dec)
+    exps = imaging.sample_evenly(get_exposures(ra, dec), n)
+    out = []
+    for e in exps:
+        t0 = time.time()
+        item = {"uri": e["uri"], "s3_url": upstream.s3_url(e["uri"])}
+        try:
+            c = upstream.s3_cutout(e["uri"], ra, dec, 0.1)
+            item.update(ok=True, shape=list(c["image"].shape), wavelength=c["wavelength"],
+                        finite_fraction=round(float(np.isfinite(c["image"]).mean()), 3))
+        except Exception as ex:
+            item.update(ok=False, error=f"{type(ex).__name__}: {ex}"[:400])
+        item["seconds"] = round(time.time() - t0, 3)
+        out.append(item)
+    return JSONResponse({"mode": upstream.SOURCE, "results": out}, headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/v1/cache/stats")
 def cache_stats():
     return JSONResponse({"version": VERSION, "redis": cache.info(), "disk": _disk_stats(),

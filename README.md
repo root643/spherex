@@ -38,6 +38,7 @@ Si la web no abre desde fuera, falta la regla de entrada TCP 80 en la *Security 
 | `GET /api/v1/cutout/prewarm?ra=&dec=&fov=&band=` | Encola en segundo plano la construcción de todas las épocas de esa banda (sin esperarla) |
 | `GET /api/v1/spectrum?ra=&dec=` | Fotometría de apertura → 102 canales (µJy) + profundidad de hielo de agua y CO₂ |
 | `GET /api/v1/cache/stats` | Redis, caché de disco y origen de los recortes (`source`: cuántos de S3, cuántos de IRSA y el último error de S3) |
+| `GET /api/v1/source/test?ra=&dec=&n=` | Diagnóstico: lee `n` recortes directamente de AWS S3, sin caché, y devuelve el tiempo o el error de cada uno |
 | `GET /api/docs` | Documentación interactiva |
 
 `fov` va en segundos de arco (60–1800). `band` es `D1`…`D6` (detector completo) o `ch1`…`ch102` (canal fino). Los fotogramas devuelven cabeceras `X-Spherex-*` (límites de escala, nº de exposiciones, fecha, λ media, escala).

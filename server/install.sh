@@ -155,9 +155,23 @@ check "observations (Barnard)"   "$B/api/v1/observations?ra=269.4521&dec=4.6934"
 check "frame WebP (Barnard, D2)" "$B/api/v1/cutout/frame?ra=269.4521&dec=4.6934&fov=240&epoch=0&band=D2" 280
 check "spectrum (Barnard)"       "$B/api/v1/spectrum?ra=269.4521&dec=4.6934" 290
 
-# de donde han salido los recortes: lo normal es s3 > 0 e irsa = 0
-echo "  Origen de los recortes (s3 = bucket de AWS, irsa = respaldo):"
-curl -s --max-time 10 "$B/api/v1/cache/stats" | /opt/spherex-env/bin/python -c '
+# lectura directa del bucket de AWS, sin caches (las pruebas de arriba pueden salir de Redis/Nginx)
+echo "  Lectura directa de AWS S3 (3 recortes de Barnard, sin cache):"
+curl -s --max-time 120 "http://127.0.0.1:8000/api/v1/source/test?ra=269.4521&dec=4.6934&n=3" | /opt/spherex-env/bin/python -c '
+import json, sys
+try:
+    rs = json.load(sys.stdin)["results"]
+except Exception as e:
+    print("    FALLO  no se pudo ejecutar la prueba:", e); sys.exit(0)
+for r in rs:
+    if r.get("ok"):
+        print("    OK     %ss  %sx%s px  lambda=%s um  validos=%s" % (r["seconds"], r["shape"][1], r["shape"][0], r.get("wavelength"), r.get("finite_fraction")))
+    else:
+        print("    FALLO  %ss  %s" % (r["seconds"], r.get("error")))
+        print("           " + str(r.get("s3_url")))
+' || true
+echo "  Recortes servidos desde que arranco el contador (s3 = AWS, irsa = respaldo):"
+curl -s --max-time 10 "http://127.0.0.1:8000/api/v1/cache/stats" | /opt/spherex-env/bin/python -c '
 import json, sys
 try:
     s = json.load(sys.stdin)["source"]
@@ -166,7 +180,7 @@ except Exception as e:
 print("    modo=%s  s3=%s  irsa=%s  s3_missing=%s  s3_error=%s" % tuple(s.get(k) for k in ("mode", "s3", "irsa", "s3_missing", "s3_error")))
 for k in ("last_s3_error", "last_s3_missing"):
     if s.get(k): print("    %s: %s" % (k, s[k]))
-if not s.get("s3"): print("    AVISO: ningun recorte ha salido de S3; se esta usando IRSA (mas lento)")
+if not s.get("s3") and not s.get("irsa"): print("    (todo a cero: las pruebas de arriba salieron de la cache, no se descargo nada)")
 ' || true
 
 if [ "$FAIL" -ne 0 ]; then
