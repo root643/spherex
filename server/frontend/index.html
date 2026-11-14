@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPHEREx Blink · visor temporal de 102 bandas</title>
+<meta name="description" content="Visor tipo WiseView para las imágenes de NASA SPHEREx: parpadeo entre épocas, diferencia, coadición y espectro de 102 canales.">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <h1>SPHEREx Blink</h1>
+    <span class="sub">Planet X &amp; SPHEREx · NASA Space Apps 2026</span>
+  </div>
+  <form id="search" class="search" autocomplete="off">
+    <input id="q" type="search" placeholder="Nombre u «RA Dec» en grados — p. ej. WISE 0855 o 269.452 4.693" aria-label="Buscar objeto o coordenadas">
+    <button type="submit">Ir</button>
+  </form>
+</header>
+
+<main class="layout">
+  <aside class="panel controls" aria-label="Controles">
+    <section>
+      <h2>Objetivos de prueba</h2>
+      <div id="targets" class="chips"></div>
+    </section>
+
+    <section>
+      <h2>Posición</h2>
+      <div class="row2">
+        <label>RA (°)<input id="ra" type="number" step="any" min="0" max="360"></label>
+        <label>Dec (°)<input id="dec" type="number" step="any" min="-90" max="90"></label>
+      </div>
+      <label>Campo de visión <output id="fovOut"></output>
+        <input id="fov" type="range" min="60" max="1800" step="30">
+      </label>
+    </section>
+
+    <section>
+      <h2>Banda</h2>
+      <div id="bands" class="seg" role="group" aria-label="Detector"></div>
+      <label class="check"><input id="useCh" type="checkbox"> Canal fino (1–102)</label>
+      <label id="chWrap" hidden>Canal <output id="chOut"></output>
+        <input id="ch" type="range" min="1" max="102" step="1">
+      </label>
+    </section>
+
+    <section>
+      <h2>Modo</h2>
+      <div id="modes" class="seg" role="group" aria-label="Modo">
+        <button type="button" data-mode="blink">Blink</button>
+        <button type="button" data-mode="diff">Diferencia</button>
+        <button type="button" data-mode="coadd">Coadición</button>
+      </div>
+      <label id="refWrap" hidden>Época de referencia
+        <select id="ref"></select>
+      </label>
+    </section>
+
+    <section>
+      <h2>Imagen</h2>
+      <div class="row2">
+        <label>Estirado
+          <select id="stretch">
+            <option value="asinh">asinh</option>
+            <option value="log">log</option>
+            <option value="sqrt">raíz</option>
+            <option value="linear">lineal</option>
+          </select>
+        </label>
+        <label>Velocidad <output id="speedOut"></output>
+          <input id="speed" type="range" min="100" max="1500" step="50">
+        </label>
+      </div>
+      <label class="check"><input id="invert" type="checkbox"> Invertir (negativo)</label>
+      <label class="check"><input id="common" type="checkbox" checked> Misma escala en todas las épocas</label>
+      <label class="check"><input id="cross" type="checkbox" checked> Retícula central</label>
+    </section>
+
+    <button id="apply" class="primary" type="button">Actualizar vista</button>
+    <button id="share" type="button">Copiar enlace</button>
+  </aside>
+
+  <section class="viewer" aria-label="Visor">
+    <div id="stage" class="stage">
+      <img id="img" alt="Fotograma SPHEREx" draggable="false">
+      <canvas id="overlay"></canvas>
+      <div class="compass" aria-hidden="true"><span>N</span><i></i><span class="e">E</span></div>
+      <div id="msg" class="msg">Elige un objetivo o introduce coordenadas.</div>
+    </div>
+    <div class="transport">
+      <button id="prev" type="button" title="Anterior (←)">◀</button>
+      <button id="play" type="button" title="Reproducir/pausar (espacio)">❚❚</button>
+      <button id="next" type="button" title="Siguiente (→)">▶</button>
+      <input id="scrub" type="range" min="0" max="0" step="1" aria-label="Fotograma">
+      <span id="frameLabel" class="mono"></span>
+    </div>
+    <div class="readout mono">
+      <span id="cursor">—</span>
+      <span id="frameMeta"></span>
+    </div>
+    <p class="hint">Clic: espectro en ese punto · Doble clic: centrar ahí · Espacio y flechas: reproducción.</p>
+  </section>
+
+  <aside class="panel sed" aria-label="Espectro">
+    <h2>Espectro de 102 canales</h2>
+    <p id="sedInfo" class="muted">Haz clic sobre un objeto de la imagen.</p>
+    <canvas id="chart"></canvas>
+    <dl id="diag" class="diag"></dl>
+    <h2>Épocas</h2>
+    <ol id="epochs" class="epochs"></ol>
+  </aside>
+</main>
+
+<footer class="foot mono">
+  <span id="stats">caché: —</span>
+  <span>Datos: NASA/JPL-Caltech · IPAC/IRSA · <a href="/api/docs">API</a></span>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>
