@@ -130,6 +130,95 @@ def walk(get_range: GetRange, total: int) -> dict:
     return exts
 
 
+def template_of(exts: dict) -> list:
+    """Plantilla [[nombre, bytes de cabecera, bytes de datos], ...] en el orden del fichero."""
+    order = sorted(exts.items(), key=lambda kv: kv[1]["hdroff"])
+    return [[name, e["hsize"], e["dsize"]] for name, e in order]
+
+
+def _merge(ranges: list[tuple[int, int]]) -> list[tuple[int, int, list[int]]]:
+    """Une rangos contiguos (p. ej. primario + cabecera de IMAGE) en una sola lectura."""
+    out: list[tuple[int, int, list[int]]] = []
+    for i, (a, b) in enumerate(ranges):
+        if out and out[-1][1] + 1 == a:
+            pa, _, idx = out[-1]
+            out[-1] = (pa, b, idx + [i])
+        else:
+            out.append((a, b, [i]))
+    return out
+
+
+def _read_many(get_many, ranges: list[tuple[int, int]]) -> list[bytes]:
+    merged = _merge(ranges)
+    blobs = get_many([(a, b) for a, b, _ in merged])
+    out: list[bytes] = [b""] * len(ranges)
+    for (a, _, idx), blob in zip(merged, blobs):
+        for i in idx:
+            ra, rb = ranges[i]
+            out[i] = blob[ra - a:rb - a + 1]
+    return out
+
+
+def _check(buf: bytes, index: int, name: str, hsize: int) -> dict | None:
+    """Comprueba que buf es exactamente la cabecera esperada; devuelve sus cards o None."""
+    if len(buf) != hsize or buf[:8] != (b"SIMPLE  " if index == 0 else b"XTENSION"):
+        return None
+    end = _end_offset(buf)
+    if end < 0 or (end + CARD + BLOCK - 1) // BLOCK * BLOCK != hsize:
+        return None
+    cards = parse_cards(buf[:end + CARD])
+    got = "PRIMARY" if index == 0 else str(cards.get("EXTNAME", f"HDU{index}")).strip()
+    return cards if got == name else None
+
+
+def walk_fast(get_many, template: list, variable: str = "FLAGS") -> tuple[dict, int] | None:
+    """Como walk() pero en dos tandas de lecturas en paralelo, a partir de una plantilla.
+
+    Todos los level2 de un mismo detector tienen la misma estructura salvo el tamano
+    del HDU comprimido (variable). Con la plantilla de un fichero ya recorrido se
+    adivina donde cae cada cabecera: primero las que hay hasta el HDU variable, y
+    con su tamano real, el resto. Cada cabecera leida se comprueba; si algo no
+    cuadra devuelve None y el llamante hace el recorrido normal.
+
+    get_many([(a, b), ...]) devuelve los bytes de cada rango (en paralelo).
+    Devuelve (exts, final), donde final debe coincidir con el tamano del fichero.
+    """
+    names = [t[0] for t in template]
+    if variable not in names or names[0] != "PRIMARY":
+        return None
+    iv = names.index(variable)
+    exts: dict[str, dict] = {}
+
+    def stage(first: int, last: int, off: int) -> int | None:
+        offs = []
+        for name, hs, ds in template[first:last]:
+            offs.append(off)
+            off += hs + padded(ds)
+        bufs = _read_many(get_many, [(o, o + template[first + k][1] - 1) for k, o in enumerate(offs)])
+        end = None
+        for k, (o, buf) in enumerate(zip(offs, bufs)):
+            name, hs, ds = template[first + k]
+            cards = _check(buf, first + k, name, hs)
+            if cards is None:
+                return None
+            real = data_size(cards)
+            if real != ds and name != variable:
+                return None
+            exts[name] = {"text": buf[:_end_offset(buf) + CARD].decode("latin1"), "hdroff": o,
+                          "hsize": hs, "dataoff": o + hs, "dsize": real}
+            end = o + hs + padded(real)
+        return end
+
+    end = stage(0, iv + 1, 0)
+    if end is None:
+        return None
+    if iv + 1 < len(template):
+        end = stage(iv + 1, len(template), end)
+        if end is None:
+            return None
+    return exts, end
+
+
 def is_plain_image(cards: dict) -> bool:
     """True si el HDU es una imagen 2D sin comprimir (legible por filas)."""
     if cards.get("ZIMAGE") is True or str(cards.get("XTENSION", "IMAGE")).strip() not in ("IMAGE", ""):

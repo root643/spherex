@@ -232,12 +232,77 @@ def _disk_write(path: str, data: bytes) -> None:
 _layouts: dict[str, dict] = {}
 _layout_lock = threading.Lock()
 _FIRST_READ = 12 * s3fits.BLOCK   # suele cubrir el HDU primario y la cabecera de IMAGE
+_TEMPLATE_KEY = re.compile(r"/(l2b-[^/]+)/.*D([1-6])_spx")   # version del procesado + detector
+_templates: dict[str, list] | None = None
+
+
+def _template_path() -> str:
+    return os.path.join(FITS_DIR, "layout", "templates.json")
+
+
+def _load_templates() -> dict[str, list]:
+    global _templates
+    if _templates is None:
+        try:
+            _templates = json.loads(_disk_read(_template_path()) or b"{}")
+        except ValueError:
+            _templates = {}
+    return _templates
+
+
+def _template_key(url: str) -> str:
+    m = _TEMPLATE_KEY.search(url)
+    return f"{m.group(1)}-D{m.group(2)}" if m else "default"
+
+
+def _walk_remote(url: str) -> dict:
+    """Localiza los HDU del fichero remoto leyendo solo cabeceras.
+
+    Si ya se conoce la estructura de otra imagen del mismo detector y procesado, las
+    cabeceras se leen en 2 tandas en paralelo (y se comprueban); si no, o si no
+    cuadra, se recorren una detras de otra (unas 6 lecturas).
+    """
+    key = _template_key(url)
+    tmpl = _load_templates().get(key)
+    if tmpl:
+        totals: list[int] = []
+
+        def get_many(ranges: list[tuple[int, int]]) -> list[bytes]:
+            rs = list(_range_pool.map(lambda ab: _s3_get(url, ab[0], ab[1]), ranges))
+            totals.append(int(rs[0].headers["Content-Range"].rsplit("/", 1)[1]))
+            return [r.content for r in rs]
+
+        try:
+            res = s3fits.walk_fast(get_many, tmpl)
+        except S3Unavailable:
+            raise
+        except Exception:
+            res = None
+        if res is not None and totals and res[1] == totals[0]:
+            return {"total": totals[0], "exts": res[0]}
+
+    first = _s3_get(url, 0, _FIRST_READ - 1)
+    head = first.content
+    total = int(first.headers["Content-Range"].rsplit("/", 1)[1])
+
+    def get(a: int, b: int) -> bytes:
+        return head[a:b + 1] if b < len(head) else _s3_range(url, a, b)
+
+    exts = s3fits.walk(get, total)
+    new = s3fits.template_of(exts)
+    if new != tmpl:
+        with _layout_lock:
+            templates = dict(_load_templates())
+            templates[key] = new
+            globals()["_templates"] = templates
+        _disk_write(_template_path(), json.dumps(templates).encode())
+    return {"total": total, "exts": exts}
 
 
 def _layout(url: str) -> dict:
     """Mapa de HDUs del fichero: {"total", "exts": {EXTNAME: {text, hdroff, hsize, dataoff, dsize}}}.
 
-    Cuesta unas 7 lecturas pequenas la primera vez; despues sale de memoria o de disco.
+    Solo se calcula la primera vez que se toca cada imagen; despues sale de memoria o de disco.
     """
     lay = _layouts.get(url)
     if lay is None:
@@ -249,14 +314,7 @@ def _layout(url: str) -> dict:
             except ValueError:
                 lay = None
         if lay is None:
-            first = _s3_get(url, 0, _FIRST_READ - 1)
-            head = first.content
-            total = int(first.headers["Content-Range"].rsplit("/", 1)[1])
-
-            def get(a: int, b: int) -> bytes:
-                return head[a:b + 1] if b < len(head) else _s3_range(url, a, b)
-
-            lay = {"total": total, "exts": s3fits.walk(get, total)}
+            lay = _walk_remote(url)
             _disk_write(path, json.dumps(lay).encode())
         with _layout_lock:
             if len(_layouts) > 4096:

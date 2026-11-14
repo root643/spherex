@@ -40,7 +40,7 @@ def image_hdu(name, arr, extra=()):
     return hdu(cards, arr.astype(arr.dtype.newbyteorder(">")).tobytes())
 
 
-def build():
+def build(packed_len=256 * 7, extra_cards=0):
     rng = np.random.default_rng(1)
     nx, ny = 50, 40
     img = rng.normal(size=(ny, nx)).astype("f4")
@@ -55,12 +55,13 @@ def build():
            card("OBSERVER", "O'Brien / JPL", "comilla y barra"), card("CDELT1", -1.7083e-3)]
     sip += [card(f"A_{i}_{j}", 1.5e-7 * (i + j)) for i in range(8) for j in range(8)]
     sip += ["COMMENT " + "x" * 72, "HISTORY = no es una clave".ljust(80)]
+    sip += [card(f"X{i}", i) for i in range(extra_cards)]
     table = bytes(range(256)) * 12            # tabla binaria ficticia: 3072 bytes
     wave = hdu([card("XTENSION", "BINTABLE"), card("BITPIX", 8), card("NAXIS", 2), card("NAXIS1", 1024),
                 card("NAXIS2", 2), card("PCOUNT", 1024), card("GCOUNT", 1), card("TFIELDS", 1),
                 card("EXTNAME", "WCS-WAVE")], table)
     # como en los ficheros reales: FLAGS comprimido por tiles (tabla binaria con ZIMAGE) y EPSF en tabla
-    packed = bytes(reversed(range(256))) * 7
+    packed = (bytes(reversed(range(256))) * (packed_len // 256 + 1))[:packed_len]
     cflags = hdu([card("XTENSION", "BINTABLE"), card("BITPIX", 8), card("NAXIS", 2), card("NAXIS1", 8),
                   card("NAXIS2", ny), card("PCOUNT", len(packed) - 8 * ny), card("GCOUNT", 1),
                   card("TFIELDS", 1), card("ZIMAGE", True), card("ZBITPIX", 32), card("ZNAXIS", 2),
@@ -172,6 +173,44 @@ def test_layout_prefetch_like_upstream():
     exts = s3fits.walk(get, len(blob))
     assert exts == s3fits.walk(Remote(blob).get, len(blob))
     assert r.calls < 7, r.calls
+
+
+class Many:
+    """get_many simulado: cuenta tandas y peticiones."""
+    def __init__(self, blob):
+        self.blob, self.rounds, self.calls = blob, 0, 0
+
+    def __call__(self, ranges):
+        self.rounds += 1
+        self.calls += len(ranges)
+        return [self.blob[a:b + 1] for a, b in ranges]
+
+
+def test_walk_fast():
+    a, _, _ = build()
+    tmpl = s3fits.template_of(s3fits.walk(Remote(a).get, len(a)))
+    assert [t[0] for t in tmpl] == ["PRIMARY", "IMAGE", "FLAGS", "VARIANCE", "ZODI", "EPSF", "WCS-WAVE"]
+    # otro fichero del mismo detector: misma estructura, FLAGS comprimido de otro tamano
+    for plen in (256 * 7, 5000, 123457, 2880 * 3):
+        b, _, _ = build(packed_len=plen)
+        m = Many(b)
+        res = s3fits.walk_fast(m, tmpl)
+        assert res is not None, plen
+        exts, end = res
+        assert end == len(b)
+        assert exts == s3fits.walk(Remote(b).get, len(b)), plen
+        # 2 tandas: (primario+IMAGE juntos, FLAGS) y (VARIANCE, ZODI, EPSF, WCS-WAVE)
+        assert m.rounds == 2 and m.calls == 6, (m.rounds, m.calls)
+    # estructura distinta (cabecera IMAGE con un bloque mas): debe rechazar, no inventar
+    c, _, _ = build(extra_cards=40)
+    assert s3fits.walk(Remote(c).get, len(c))["IMAGE"]["hsize"] != tmpl[1][1]
+    assert s3fits.walk_fast(Many(c), tmpl) is None
+    # fichero cortado y plantillas inservibles
+    assert s3fits.walk_fast(Many(a[:len(a) // 2]), tmpl) is None
+    assert s3fits.walk_fast(Many(a), [t for t in tmpl if t[0] != "FLAGS"]) is None
+    bad = [list(t) for t in tmpl]
+    bad[4][2] += 2880                              # ZODI con otro tamano
+    assert s3fits.walk_fast(Many(a), bad) is None
 
 
 if __name__ == "__main__":

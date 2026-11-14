@@ -57,6 +57,7 @@ Las imágenes se leen del bucket público `nasa-irsa-spherex` (AWS, `us-east-1`,
 - La ruta en S3 sale de la URL de IRSA: `…/ibe/data/spherex/dr1/level2/…fits` → `https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/dr1/level2/…fits`.
 - No se baja la imagen entera (decenas de MB). Con peticiones HTTP `Range` se leen solo las cabeceras (una vez por imagen; quedan en `/var/cache/spherex/fits/layout`) y las filas del recorte de `IMAGE`, `ZODI` y `VARIANCE`. `FLAGS` viene comprimido y se trae entero (queda en `…/flags`); la tabla `WCS-WAVE` queda en `…/wave`.
 - Las lecturas de una misma imagen van en paralelo, y `VARIANCE` solo se pide para el espectro.
+- Las cabeceras de una imagen nueva se leen en 2 tandas en paralelo, usando como plantilla la estructura de otra imagen del mismo detector y procesado (cada cabecera se comprueba; si no cuadra, se recorren en serie).
 - Si una imagen no está en el bucket o la lectura falla, ese recorte se pide a IRSA. Tras 12 fallos seguidos de S3 se deja de intentar durante 10 minutos.
 
 Variables de entorno (en `/etc/systemd/system/spherex.service`):
