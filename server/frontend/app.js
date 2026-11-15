@@ -300,9 +300,13 @@
         });
         if (state.invert) q.set("invert", "true");
         if (state.mode === "diff") q.set("ref", state.ref);
-        if (state.common && commonLimits) {
-          q.set("vmin", commonLimits.vmin);
-          q.set("vmax", commonLimits.vmax);
+        if (state.common && frames.length) {
+          const vmins = frames.map((f) => f.meta && f.meta.vmin).filter((v) => typeof v === "number" && !isNaN(v));
+          const vmaxs = frames.map((f) => f.meta && f.meta.vmax).filter((v) => typeof v === "number" && !isNaN(v));
+          if (vmins.length && vmaxs.length) {
+            q.set("vmin", Math.min(...vmins));
+            q.set("vmax", Math.max(...vmaxs));
+          }
         }
         const res = await fetch(`${API}/cutout/gif?${q}`);
         if (!res.ok) throw new Error(await errText(res));

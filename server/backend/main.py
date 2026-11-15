@@ -301,25 +301,37 @@ def cutout_gif(ra: float = RA, dec: float = DEC, fov: float = FOV, band: str = Q
             raise HTTPException(400, "Hacen falta al menos 2 epocas para el modo diferencia")
         if ref not in usable_epochs:
             ref = usable_epochs[0]
-        ref_arr, _ = build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, ref), "median",
-                                 MAX_PER_FRAME, res)
+        try:
+            ref_arr, _ = build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, ref), "median",
+                                     MAX_PER_FRAME, res)
+        except Exception as e:
+            raise HTTPException(404, f"No se pudo cargar la epoca de referencia {ref}: {e}")
         for ep in usable_epochs:
             if ep == ref:
                 continue
-            arr, meta = build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, ep), "median",
-                                    MAX_PER_FRAME, res)
-            diff_arr = arr - ref_arr
-            meta_copy = dict(meta)
-            meta_copy["date"] = f"{meta['date']} − ref"
-            meta_copy["label_sub"] = f"SPHEREx · {band} · {int(fov)}″"
-            frames_data.append((diff_arr, meta_copy))
+            try:
+                arr, meta = build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, ep), "median",
+                                        MAX_PER_FRAME, res)
+                diff_arr = arr - ref_arr
+                meta_copy = dict(meta)
+                meta_copy["date"] = f"{meta['date']} − ref"
+                meta_copy["label_sub"] = f"SPHEREx · {band} · {int(fov)}″"
+                frames_data.append((diff_arr, meta_copy))
+            except Exception:
+                continue
     else:
         for ep in usable_epochs:
-            arr, meta = build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, ep), "median",
-                                    MAX_PER_FRAME, res)
-            meta_copy = dict(meta)
-            meta_copy["label_sub"] = f"SPHEREx · {band} · {int(fov)}″"
-            frames_data.append((arr, meta_copy))
+            try:
+                arr, meta = build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, ep), "median",
+                                        MAX_PER_FRAME, res)
+                meta_copy = dict(meta)
+                meta_copy["label_sub"] = f"SPHEREx · {band} · {int(fov)}″"
+                frames_data.append((arr, meta_copy))
+            except Exception:
+                continue
+
+    if not frames_data:
+        raise HTTPException(404, f"No hay imagenes validas en {band} para generar el GIF animado")
 
     body = imaging.render_gif(frames_data, stretch=stretch, invert=invert, diff=(mode == "diff"),
                               duration_ms=speed, watermark=watermark, vmin=vmin, vmax=vmax)
