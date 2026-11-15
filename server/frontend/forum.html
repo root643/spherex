@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Foro de hallazgos · SPHEREx Blink</title>
-<meta name="description" content="Posibles asteroides, enanas marrones y otros hallazgos en las imágenes de NASA SPHEREx, con su animación y su espectro de 102 bandas. Vota las propuestas.">
+<title>Community Findings · SPHEREx Blink Forum</title>
+<meta name="description" content="Possible asteroids, brown dwarfs, and discoveries in NASA SPHEREx data with animation and 102-band spectra. Vote on proposals.">
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css?v=21">
+<link rel="stylesheet" href="style.css?v=22">
 </head>
 <body class="forum-page">
 <header class="top">
@@ -15,44 +15,44 @@
     <h1>SPHEREx Blink</h1>
     <span class="sub">Planet X &amp; SPHEREx · NASA Space Apps 2026</span>
   </div>
-  <nav class="nav" aria-label="Secciones">
-    <a href="/">Visor</a>
-    <a href="/forum.html" aria-current="page">Foro</a>
+  <nav class="nav" aria-label="Sections">
+    <a href="/">Viewer</a>
+    <a href="/forum.html" aria-current="page">Forum</a>
   </nav>
 </header>
 
 <main class="forum">
   <section class="forum-intro">
     <div>
-      <h2 class="forum-title">Hallazgos de la comunidad</h2>
-      <p class="muted">Posibles asteroides, objetos que se mueven entre épocas o espectros raros. Cada publicación guarda la animación tal como la vio su autor y el espectro de 102 bandas del objeto. Vota lo que te parezca prometedor y ábrelo en el visor para comprobarlo.</p>
+      <h2 class="forum-title">Community Findings</h2>
+      <p class="muted">Possible asteroids, objects moving between epochs, or unusual spectra. Each post preserves the time-series animation as seen by its author alongside the 102-band spectrum of the object. Vote on promising candidates and open them directly in the viewer to verify.</p>
     </div>
-    <a class="publish-btn big" href="/?publish=1">Publicar un hallazgo</a>
+    <a class="publish-btn big" href="/?publish=1">Publish a finding</a>
   </section>
 
-  <nav id="sortTabs" class="sort-tabs" aria-label="Ordenar publicaciones">
-    <button type="button" data-sort="hot">Populares</button>
-    <button type="button" data-sort="new">Nuevas</button>
-    <button type="button" data-sort="top">Más votadas</button>
+  <nav id="sortTabs" class="sort-tabs" aria-label="Sort posts">
+    <button type="button" data-sort="hot">Hot</button>
+    <button type="button" data-sort="new">New</button>
+    <button type="button" data-sort="top">Top Voted</button>
   </nav>
-  <a id="backLink" class="back-link" href="#" hidden>← Volver al foro</a>
+  <a id="backLink" class="back-link" href="#" hidden>← Back to forum</a>
 
   <div id="feed" class="feed" aria-live="polite"></div>
   <p id="feedMsg" class="feed-msg" role="status"></p>
-  <button id="more" type="button" class="more" hidden>Cargar más</button>
+  <button id="more" type="button" class="more" hidden>Load more</button>
 </main>
 
 <footer class="foot mono">
   <span id="forumCount">—</span>
-  <span>Datos: NASA/JPL-Caltech · IPAC/IRSA · <a href="/api/docs">API</a></span>
+  <span>Data: NASA/JPL-Caltech · IPAC/IRSA · <a href="/api/docs">API</a></span>
 </footer>
 
 <template id="postTpl">
   <article class="post">
-    <div class="vote" role="group" aria-label="Votar">
-      <button type="button" class="up" aria-label="Votar a favor" aria-pressed="false">▲</button>
+    <div class="vote" role="group" aria-label="Vote">
+      <button type="button" class="up" aria-label="Upvote" aria-pressed="false">▲</button>
       <span class="score mono">0</span>
-      <button type="button" class="down" aria-label="Votar en contra" aria-pressed="false">▼</button>
+      <button type="button" class="down" aria-label="Downvote" aria-pressed="false">▼</button>
     </div>
     <div class="post-main">
       <h3 class="post-title"><a></a></h3>
@@ -60,26 +60,26 @@
       <ul class="post-chips"></ul>
       <div class="post-media">
         <figure class="post-gif">
-          <a class="gif-link" title="Abrir en el visor para analizarlo"><img alt="" loading="lazy" decoding="async"></a>
+          <a class="gif-link" title="Open in viewer to inspect"><img alt="" loading="lazy" decoding="async"></a>
           <figcaption class="mono"></figcaption>
         </figure>
         <figure class="post-spec">
-          <canvas aria-label="Espectro de 102 canales"></canvas>
+          <canvas aria-label="102-channel spectrum"></canvas>
           <figcaption class="mono"></figcaption>
         </figure>
       </div>
       <p class="post-body"></p>
       <div class="post-actions">
-        <a class="analyze primary-link">Analizar en el visor</a>
-        <a class="permalink">Enlace</a>
-        <button type="button" class="copy">Copiar enlace</button>
-        <button type="button" class="delete" hidden>Borrar</button>
+        <a class="analyze primary-link">Analyze in viewer</a>
+        <a class="permalink">Permalink</a>
+        <button type="button" class="copy">Copy link</button>
+        <button type="button" class="delete" hidden>Delete</button>
       </div>
     </div>
   </article>
 </template>
 
-<script src="chart.js?v=4"></script>
-<script src="forum.js?v=4"></script>
+<script src="chart.js?v=5"></script>
+<script src="forum.js?v=5"></script>
 </body>
 </html>

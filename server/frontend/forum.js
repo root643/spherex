@@ -4,7 +4,7 @@
   const API = "/api/v1/forum";
   const $ = (id) => document.getElementById(id);
   const PAGE = 12;
-  const MODE_NAME = { blink: "Blink", diff: "Diferencia", coadd: "Coadición" };
+  const MODE_NAME = { blink: "Blink", diff: "Difference", coadd: "Coaddition" };
 
   // ------------------------------------------------------------------ identidad local
   // El voto va asociado a un identificador aleatorio de este navegador, y el borrado
@@ -44,14 +44,14 @@
     return body;
   }
 
-  // ------------------------------------------------------------------ formato
+  // ------------------------------------------------------------------ formatting
   function timeAgo(t) {
     const s = Math.max(0, Date.now() / 1000 - t);
-    if (s < 60) return "hace un momento";
-    if (s < 3600) return `hace ${Math.floor(s / 60)} min`;
-    if (s < 86400) return `hace ${Math.floor(s / 3600)} h`;
-    if (s < 86400 * 30) { const d = Math.floor(s / 86400); return `hace ${d} ${d === 1 ? "día" : "días"}`; }
-    return new Date(t * 1000).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" });
+    if (s < 60) return "just now";
+    if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+    if (s < 86400 * 30) { const d = Math.floor(s / 86400); return `${d} ${d === 1 ? "day" : "days"} ago`; }
+    return new Date(t * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
   const fmtCoord = (ra, dec) => `${ra.toFixed(4)}°, ${dec >= 0 ? "+" : ""}${dec.toFixed(4)}°`;
   const pct = (v) => (v == null ? null : (v * 100).toFixed(1).replace(".", ",") + " %");
@@ -97,12 +97,12 @@
     } catch {
       specCache.delete(url);
       canvas.classList.remove("loading");
-      cap.textContent = "No se pudo cargar el espectro";
+      cap.textContent = "Could not load spectrum";
     }
   }
 
-  // ------------------------------------------------------------------ tarjeta
-  const pending = new Map();   // id -> temporizador de sondeo de las que se estan generando
+  // ------------------------------------------------------------------ card
+  const pending = new Map();   // id -> polling timer
 
   function card(p, full) {
     const tpl = $("postTpl");
@@ -117,18 +117,18 @@
     a.textContent = p.title; a.href = `#p/${p.id}`;
     const target = p.target ? `${p.target} · ` : "";
     el.querySelector(".post-meta").textContent =
-      `${p.author || "Anónimo"} · ${timeAgo(p.created)} · ${target}${fmtCoord(v.ra, v.dec)}`;
-    el.querySelector(".post-meta").title = new Date(p.created * 1000).toLocaleString("es-ES");
+      `${p.author || "Anonymous"} · ${timeAgo(p.created)} · ${target}${fmtCoord(v.ra, v.dec)}`;
+    el.querySelector(".post-meta").title = new Date(p.created * 1000).toLocaleString("en-US");
 
     const chips = [
-      v.band.startsWith("ch") ? `Canal ${v.band.slice(2)}` : v.band, MODE_NAME[v.mode] || v.mode,
+      v.band.startsWith("ch") ? `Channel ${v.band.slice(2)}` : v.band, MODE_NAME[v.mode] || v.mode,
       `${Math.round(v.fov)}″`, v.stretch,
     ];
-    if (v.invert) chips.push("negativo");
+    if (v.invert) chips.push("negative");
     const ul = el.querySelector(".post-chips");
     chips.forEach((c) => { const li = document.createElement("li"); li.textContent = c; ul.appendChild(li); });
     const d = p.diagnostics || {};
-    [[pct(d["h2o_ice_3.05um_depth"]), "Hielo H₂O"], [pct(d["co2_4.27um_depth"]), "CO₂"]].forEach(([val, name]) => {
+    [[pct(d["h2o_ice_3.05um_depth"]), "Water Ice"], [pct(d["co2_4.27um_depth"]), "CO₂"]].forEach(([val, name]) => {
       if (val == null) return;
       const li = document.createElement("li"); li.className = "diag-chip"; li.textContent = `${name} ${val}`; ul.appendChild(li);
     });
@@ -142,15 +142,15 @@
     el.querySelector(".permalink").href = `#p/${p.id}`;
     el.querySelector(".copy").onclick = async (ev) => {
       const b = ev.currentTarget;
-      try { await navigator.clipboard.writeText(postUrl(p)); b.textContent = "Copiado"; }
-      catch { prompt("Copia este enlace:", postUrl(p)); }
-      setTimeout(() => (b.textContent = "Copiar enlace"), 1500);
+      try { await navigator.clipboard.writeText(postUrl(p)); b.textContent = "Copied"; }
+      catch { prompt("Copy this link:", postUrl(p)); }
+      setTimeout(() => (b.textContent = "Copy link"), 1500);
     };
     const del = el.querySelector(".delete");
     if (p.owner) {
       del.hidden = false;
       del.onclick = async () => {
-        if (!confirm("¿Borrar esta publicación? No se puede deshacer.")) return;
+        if (!confirm("Delete this post? This cannot be undone.")) return;
         try {
           await api(`/posts/${p.id}`, { method: "DELETE", headers: { "X-Owner-Token": owned()[p.id] || "" } });
           const o = owned(); delete o[p.id]; store.set("spherex.owned", o);
@@ -178,29 +178,29 @@
       box.className = "media-state";
       if (p.status === "processing") {
         box.innerHTML = '<span class="spin" aria-hidden="true"></span><b></b><small></small>';
-        box.querySelector("b").textContent = "Generando la animación y midiendo las 102 bandas…";
-        box.querySelector("small").textContent = "Suele tardar unos segundos si el autor ya tenía la vista cargada.";
+        box.querySelector("b").textContent = "Generating animation and measuring 102 bands…";
+        box.querySelector("small").textContent = "Usually takes a few seconds if the author already had the view loaded.";
         poll(p.id);
       } else {
         box.innerHTML = "<b></b><small></small>";
-        box.querySelector("b").textContent = "No se pudo generar esta publicación";
+        box.querySelector("b").textContent = "Could not generate this post";
         box.querySelector("small").textContent = p.error || "";
       }
       media.appendChild(box);
       return;
     }
     img.src = p.gif;
-    img.alt = `Animación de ${p.frames || ""} fotogramas de SPHEREx en ${p.view.band}: ${p.title}`;
-    gcap.textContent = `${p.frames || "?"} ${p.view.mode === "coadd" ? "fotograma" : "épocas"} · ${p.view.speed} ms · clic para analizar`;
+    img.alt = `Animation of ${p.frames || ""} SPHEREx frames in ${p.view.band}: ${p.title}`;
+    gcap.textContent = `${p.frames || "?"} ${p.view.mode === "coadd" ? "frame" : "epochs"} · ${p.view.speed} ms · click to analyze`;
     if (p.spectrum) {
       canvas.dataset.src = p.spectrum;
       canvas.classList.add("loading");
-      const at = p.object ? "objeto marcado " + fmtCoord(p.object.ra, p.object.dec) : "centro de la vista";
-      scap.textContent = `102 canales · ${p.n_exposures || "?"} exposiciones · ${at}`;
+      const at = p.object ? "marked object " + fmtCoord(p.object.ra, p.object.dec) : "center of view";
+      scap.textContent = `102 channels · ${p.n_exposures || "?"} exposures · ${at}`;
       io.observe(canvas);
     } else {
       el.querySelector(".post-spec").classList.add("empty");
-      scap.textContent = p.error || "Espectro no disponible";
+      scap.textContent = p.error || "Spectrum unavailable";
     }
   }
 
@@ -228,7 +228,7 @@
   function paintVotes(el, p) {
     const up = el.querySelector(".up"), down = el.querySelector(".down"), sc = el.querySelector(".score");
     sc.textContent = p.score;
-    sc.title = `${p.ups} a favor · ${p.downs} en contra`;
+    sc.title = `${p.ups} upvotes · ${p.downs} downvotes`;
     up.setAttribute("aria-pressed", String(p.my_vote === 1));
     down.setAttribute("aria-pressed", String(p.my_vote === -1));
     el.querySelector(".vote").classList.toggle("voted-up", p.my_vote === 1);
@@ -295,11 +295,11 @@
       const r = await api(`/posts?sort=${sort}&limit=${PAGE}&offset=${offset}`);
       if (token !== listToken) return;
       document.querySelectorAll(".skeleton").forEach((s) => s.remove());
-      $("forumCount").textContent = `${r.total} ${r.total === 1 ? "publicación" : "publicaciones"}`;
+      $("forumCount").textContent = `${r.total} ${r.total === 1 ? "post" : "posts"}`;
       if (!r.posts.length && offset === 0) {
-        $("feed").innerHTML = '<div class="empty-state"><b>Aún no hay hallazgos publicados.</b>' +
-          '<span>Abre el visor, busca algo que se mueva entre épocas y pulsa «Publicar en el foro».</span>' +
-          '<a class="publish-btn" href="/?publish=1">Publicar el primero</a></div>';
+        $("feed").innerHTML = '<div class="empty-state"><b>No findings published yet.</b>' +
+          '<span>Open the viewer, look for motion across epochs, and click «Publish to forum».</span>' +
+          '<a class="publish-btn" href="/?publish=1">Publish the first one</a></div>';
       }
       r.posts.forEach((p) => $("feed").appendChild(card(p, false)));
       offset += r.posts.length;
@@ -307,7 +307,7 @@
     } catch (e) {
       if (token !== listToken) return;
       document.querySelectorAll(".skeleton").forEach((s) => s.remove());
-      $("feedMsg").textContent = "No se pudo cargar el foro: " + e.message; $("feedMsg").classList.add("err");
+      $("feedMsg").textContent = "Could not load forum: " + e.message; $("feedMsg").classList.add("err");
     } finally {
       if (token === listToken) { loading = false; $("more").disabled = false; }
     }
@@ -321,7 +321,7 @@
       if (token !== listToken) return;
       $("feed").textContent = "";
       $("feed").appendChild(card(p, true));
-      document.title = `${p.title} · Foro SPHEREx Blink`;
+      document.title = `${p.title} · SPHEREx Blink Forum`;
     } catch (e) {
       if (token !== listToken) return;
       $("feed").textContent = "";
@@ -335,7 +335,7 @@
     $("backLink").hidden = !id;
     [...$("sortTabs").children].forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.sort === sort)));
     if (id) { loadOne(id); window.scrollTo(0, 0); }
-    else { document.title = "Foro de hallazgos · SPHEREx Blink"; loadList(true); }
+    else { document.title = "Community Findings · SPHEREx Blink Forum"; loadList(true); }
   }
 
   [...$("sortTabs").children].forEach((b) => (b.onclick = () => {

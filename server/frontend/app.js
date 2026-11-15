@@ -4,11 +4,11 @@
   const API = "/api/v1";
   const $ = (id) => document.getElementById(id);
   const TARGETS = [
-    { name: "Barnard", q: "Barnard's Star", desc: "Estrella de Barnard: mayor movimiento propio conocido (10.3″/año). Muy visible en parpadeo temporal.", ra: 269.4521, dec: 4.6934, fov: 240, band: "D2" },
-    { name: "WISE 0855", q: "WISE 0855-0714", desc: "WISE 0855-0714: enana marrón sub-estelar más fría (~250 K), observable en bandas térmicas D5/D6.", ra: 133.7951, dec: -7.2451, fov: 240, band: "D5" },
-    { name: "ε Indi B", q: "Epsilon Indi B", desc: "Épsilon Indi B: sistema binario de enanas marrones cercanas (12 años luz) con alto movimiento propio.", ra: 331.044, dec: -56.783, fov: 300, band: "D3" },
-    { name: "RW Aur", q: "RW Aurigae", desc: "RW Aurigae: estrella binaria joven variable tipo T Tauri con disco circunestelar de acreción.", ra: 76.956, dec: 30.401, fov: 300, band: "D2" },
-    { name: "R Dra", q: "R Draconis", desc: "R Draconis: gigante roja pulsante variable tipo Mira con intensos cambios de brillo entre épocas.", ra: 248.168, dec: 66.755, fov: 300, band: "D2" },
+    { name: "Barnard", q: "Barnard's Star", desc: "Barnard's Star: largest known proper motion (10.3″/yr). Highly visible in time-series blinking.", ra: 269.4521, dec: 4.6934, fov: 240, band: "D2" },
+    { name: "WISE 0855", q: "WISE 0855-0714", desc: "WISE 0855-0714: coldest sub-stellar brown dwarf (~250 K), observable in D5/D6 thermal bands.", ra: 133.7951, dec: -7.2451, fov: 240, band: "D5" },
+    { name: "ε Indi B", q: "Epsilon Indi B", desc: "Epsilon Indi B: nearby brown dwarf binary system (12 ly) with high proper motion.", ra: 331.044, dec: -56.783, fov: 300, band: "D3" },
+    { name: "RW Aur", q: "RW Aurigae", desc: "RW Aurigae: young variable T Tauri binary star with circumstellar accretion disk.", ra: 76.956, dec: 30.401, fov: 300, band: "D2" },
+    { name: "R Dra", q: "R Draconis", desc: "R Draconis: pulsating Mira-type red giant variable with intense brightness changes across epochs.", ra: 248.168, dec: 66.755, fov: 300, band: "D2" },
   ];
   const DET = { 1: [0.75, 1.10], 2: [1.10, 1.63], 3: [1.63, 2.42], 4: [2.42, 3.83], 5: [3.83, 4.42], 6: [4.42, 5.0] };
   const DET_COLOR = ["#7aa2f7", "#7fd1b9", "#c3e88d", "#ffb454", "#ff8a65", "#f07178"];
@@ -51,7 +51,7 @@
       spectrumAbortController.abort();
       spectrumAbortController = null;
       if (chartLoader) chartLoader.done("");
-      $("sedInfo").textContent = "Haz clic o toca sobre un objeto para analizar su espectro.";
+      $("sedInfo").textContent = "Click or tap an object to analyze its spectrum.";
     }
   }
 
@@ -237,7 +237,7 @@
     const u = Math.random() * 2 - 1;
     const dec = +(Math.asin(u) * 180 / Math.PI).toFixed(4);
     const band = "D" + (Math.floor(Math.random() * 6) + 1);
-    return { name: `Esfera celeste (${ra}° ${dec >= 0 ? "+" : ""}${dec}°)`, ra, dec, fov: 300, band, type: "Distribución uniforme cos(Dec)" };
+    return { name: `Celestial Sphere (${ra}° ${dec >= 0 ? "+" : ""}${dec}°)`, ra, dec, fov: 300, band, type: "Uniform distribution cos(Dec)" };
   }
 
   async function handleRandomCoordinates() {
@@ -254,7 +254,7 @@
     marker = null; targetName = t.name || "";
     paintControls();
     syncUrl();
-    setMsg(`🎲 Coordenadas aleatorias: RA ${state.ra.toFixed(4)}°, Dec ${state.dec >= 0 ? "+" : ""}${state.dec.toFixed(4)}° (${state.band})`);
+    setMsg(`🎲 Random coordinates: RA ${state.ra.toFixed(4)}°, Dec ${state.dec >= 0 ? "+" : ""}${state.dec.toFixed(4)}° (${state.band})`);
     reload();
   }
 
@@ -415,12 +415,12 @@
       $("targets").appendChild(b);
     });
     const DET_DESC = {
-      1: "Detector 1 (0.75 – 1.10 µm)\nInfrarrojo cercano óptico (NIR). Óptimo para estrellas frías y enanas M.",
-      2: "Detector 2 (1.10 – 1.63 µm)\nInfrarrojo cercano (banda J). Detecta firmas de absorción de agua e hidrocarburos.",
-      3: "Detector 3 (1.63 – 2.42 µm)\nInfrarrojo cercano (bandas H y K). Sensible a hielos interestelares y nubes de polvo.",
-      4: "Detector 4 (2.42 – 3.83 µm)\nInfrarrojo medio (MIR). Cubre la banda profunda de absorción de hielo de agua (3.05 µm).",
-      5: "Detector 5 (3.83 – 4.42 µm)\nInfrarrojo medio (MIR). Incluye la banda diagnóstica de hielo de CO2 (4.27 µm).",
-      6: "Detector 6 (4.42 – 5.00 µm)\nLímite infrarrojo de SPHEREx. Máxima sensibilidad a fuentes ultrafrías y enanas tipo Y."
+      1: "Detector 1 (0.75 – 1.10 µm)\nNear-infrared optical (NIR). Optimal for cool stars and M dwarfs.",
+      2: "Detector 2 (1.10 – 1.63 µm)\nNear-infrared (J-band). Detects water and hydrocarbon absorption signatures.",
+      3: "Detector 3 (1.63 – 2.42 µm)\nNear-infrared (H and K bands). Sensitive to interstellar ices and dust clouds.",
+      4: "Detector 4 (2.42 – 3.83 µm)\nMid-infrared (MIR). Covers the deep water ice absorption band (3.05 µm).",
+      5: "Detector 5 (3.83 – 4.42 µm)\nMid-infrared (MIR). Includes diagnostic CO2 ice band (4.27 µm).",
+      6: "Detector 6 (4.42 – 5.00 µm)\nSPHEREx infrared limit. Maximum sensitivity to ultra-cool sources and Y dwarfs."
     };
     for (let d = 1; d <= 6; d++) {
       const b = document.createElement("button");
@@ -430,9 +430,9 @@
       $("bands").appendChild(b);
     }
     const MODE_DESC = {
-      blink: "Modo Parpadeo (Blink)\nAlterna sucesivamente las épocas de SPHEREx para detectar movimiento aparente o variabilidad temporal.",
-      diff: "Modo Diferencia (Resta)\nResta cada época contra la de referencia. Los objetos fijos se anulan, resaltando movimiento o cambio de brillo.",
-      coadd: "Modo Coadición (Suma/Promedio)\nPromedia todas las épocas observadas para maximizar la relación señal-ruido y revelar fuentes muy débiles."
+      blink: "Blink Mode\nCycles through SPHEREx epochs to reveal apparent motion or time variability.",
+      diff: "Difference Mode (Subtraction)\nSubtracts each epoch from the reference. Fixed objects cancel out, highlighting moving or variable sources.",
+      coadd: "Coaddition Mode (Sum/Average)\nAverages all observed epochs to maximize signal-to-noise and reveal very faint sources."
     };
     [...$("modes").children].forEach((b) => {
       b.title = MODE_DESC[b.dataset.mode] || b.textContent;
@@ -532,7 +532,7 @@
     $("speed").oninput = () => { state.speed = +$("speed").value; paintControls(); syncUrl(); if (playing) play(); };
     $("apply").onclick = () => {
       let ra = parseFloat($("ra").value), dec = parseFloat($("dec").value);
-      if (isNaN(ra) || isNaN(dec) || !(ra >= 0 && ra <= 360 && dec >= -90 && dec <= 90)) return setMsg("Coordenadas no válidas (RA 0–360°, Dec ±90°).", true);
+      if (isNaN(ra) || isNaN(dec) || !(ra >= 0 && ra <= 360 && dec >= -90 && dec <= 90)) return setMsg("Invalid coordinates (RA 0–360°, Dec ±90°).", true);
       if (ra >= 360) ra = 0;
       if ($("fovExact")) {
         const f = parseFloat($("fovExact").value);
@@ -541,20 +541,20 @@
       state.ra = ra; state.dec = dec; marker = null; reload();
     };
     $("share").onclick = async () => {
-      try { await navigator.clipboard.writeText(location.href); $("share").textContent = "Enlace copiado"; }
-      catch { prompt("Copia este enlace:", location.href); }
-      setTimeout(() => ($("share").textContent = "Copiar enlace"), 1500);
+      try { await navigator.clipboard.writeText(location.href); $("share").textContent = "Link copied"; }
+      catch { prompt("Copy this link:", location.href); }
+      setTimeout(() => ($("share").textContent = "Copy link"), 1500);
     };
     $("exportGif").onclick = async () => {
       if (state.ra == null || !frames.length) {
-        setMsg("Carga primero un campo de SPHEREx para exportar el GIF.", true);
+        setMsg("Load a SPHEREx field first to export the GIF.", true);
         return;
       }
       const btn = $("exportGif");
       const origText = btn.textContent;
       btn.disabled = true;
-      btn.textContent = "Generando…";
-      if (viewerLoader) viewerLoader.start("Generando animación GIF de las épocas…");
+      btn.textContent = "Exporting…";
+      if (viewerLoader) viewerLoader.start("Generating GIF animation across epochs…");
       try {
         const q = new URLSearchParams({
           ra: state.ra,
@@ -587,10 +587,10 @@
         a.click();
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 10000);
-        if (viewerLoader) viewerLoader.done("¡GIF animado descargado con éxito!");
+        if (viewerLoader) viewerLoader.done("Animated GIF successfully downloaded!");
       } catch (e) {
-        if (viewerLoader) viewerLoader.fail("Error exportando GIF: " + e.message);
-        else setMsg("Error exportando GIF: " + e.message, true);
+        if (viewerLoader) viewerLoader.fail("Error exporting GIF: " + e.message);
+        else setMsg("Error exporting GIF: " + e.message, true);
       } finally {
         btn.disabled = false;
         btn.textContent = origText;
@@ -600,10 +600,10 @@
       ev.preventDefault();
       const q = $("q").value.trim();
       if (!q) return;
-      setMsg("Resolviendo «" + q + "»…");
+      setMsg("Resolving «" + q + "»…");
       try {
         const r = await getJson(`${API}/targets/search?q=${encodeURIComponent(q)}`);
-        if (!r.results.length) return setMsg("No se encontró «" + q + "».", true);
+        if (!r.results.length) return setMsg("Could not find «" + q + "».", true);
         const t = r.results[0];
         state.ra = t.ra; state.dec = t.dec; marker = null; targetName = t.name || q;
         reload();
@@ -685,16 +685,16 @@
         const isFast = src.pm_total != null && src.pm_total > 120;
         tooltipEl.innerHTML = `<span style="color:#c084fc;font-weight:600">✦ Gaia DR3</span> <span class="muted">${src.id.slice(-8)}</span><br>` +
           `G: <b>${src.gmag != null ? src.gmag.toFixed(2) : "—"}</b> mag · BP−RP: <b>${src.bp_rp != null ? (src.bp_rp >= 0 ? "+" : "") + src.bp_rp.toFixed(2) : "—"}</b><br>` +
-          `PM: <b${isFast ? ' style="color:#f43f5e"' : ''}>${src.pm_total != null ? src.pm_total.toFixed(1) + " mas/a" + (isFast ? " ★ (rápida)" : "") : "—"}</b>` +
+          `PM: <b${isFast ? ' style="color:#f43f5e"' : ''}>${src.pm_total != null ? src.pm_total.toFixed(1) + " mas/yr" + (isFast ? " ★ (fast)" : "") : "—"}</b>` +
           (src.pmra != null ? ` <span class="muted">(${src.pmra}, ${src.pmdec})</span>` : "") +
-          (src.parallax != null ? `<br>Paralaje: <b>${src.parallax.toFixed(2)} mas</b>` : "");
+          (src.parallax != null ? `<br>Parallax: <b>${src.parallax.toFixed(2)} mas</b>` : "");
       } else {
         const src = item.source;
         const redClass = src.w1_w2 != null && src.w1_w2 > 1.2 ? ` style="color:#ff4081;font-weight:bold"` : "";
         tooltipEl.innerHTML = `<span style="color:#fb923c;font-weight:600">■ AllWISE</span> <span class="muted">${src.id}</span><br>` +
           `W1 (3.4 µm): <b>${src.w1 != null ? src.w1.toFixed(2) : "—"}</b> mag<br>` +
           `W2 (4.6 µm): <b>${src.w2 != null ? src.w2.toFixed(2) : "—"}</b> mag` +
-          (src.w1_w2 != null ? `<br><span${redClass}>W1−W2: <b>${src.w1_w2 >= 0 ? "+" : ""}${src.w1_w2.toFixed(2)}</b>${src.w1_w2 > 1.2 ? " ★ (candidato frío)" : ""}</span>` : "");
+          (src.w1_w2 != null ? `<br><span${redClass}>W1−W2: <b>${src.w1_w2 >= 0 ? "+" : ""}${src.w1_w2.toFixed(2)}</b>${src.w1_w2 > 1.2 ? " ★ (cold candidate)" : ""}</span>` : "");
       }
     }
 
@@ -1041,14 +1041,14 @@
       pause(true);
       frames.forEach((f) => { if (f && f.url) URL.revokeObjectURL(f.url); });
       frames = []; $("img").removeAttribute("src"); $("frameLabel").textContent = ""; $("frameMeta").textContent = "";
-      if (viewerLoader) viewerLoader.start("Consultando archivo SPHEREx…");
+      if (viewerLoader) viewerLoader.start("Querying SPHEREx archive…");
     } else {
-      let msg = "Consultando archivo SPHEREx…";
-      if (isRecenterOnly) msg = "Centrando en nuevas coordenadas…";
-      else if (isZoomOnly) msg = "Ajustando nitidez astrométrica…";
-      else if (state.mode === "diff") msg = "Calculando diferencias de época…";
-      else if (state.mode === "coadd") msg = "Generando coadición profunda…";
-      else if (state.band) msg = `Cargando banda ${state.band}…`;
+      let msg = "Querying SPHEREx archive…";
+      if (isRecenterOnly) msg = "Centering on new coordinates…";
+      else if (isZoomOnly) msg = "Adjusting astrometric sharpness…";
+      else if (state.mode === "diff") msg = "Calculating epoch differences…";
+      else if (state.mode === "coadd") msg = "Generating deep coaddition…";
+      else if (state.band) msg = `Loading band ${state.band}…`;
       if (viewerLoader) viewerLoader.start(msg);
     }
 
@@ -1064,15 +1064,15 @@
       const usable = epochs.filter((e) => e.detectors[det] > 0);
       paintEpochs(det);
       if (!usable.length) {
-        if (viewerLoader) viewerLoader.fail(`Sin imágenes en ${det} para esta posición.`);
-        return setMsg(`Sin imágenes en ${det} para esta posición. Prueba otro detector.`, true);
+        if (viewerLoader) viewerLoader.fail(`No images in ${det} for this position.`);
+        return setMsg(`No images in ${det} for this position. Try another detector.`, true);
       }
 
       let jobs;
       if (state.mode === "coadd") {
-        jobs = [{ label: `Coadición · ${usable.length} épocas`, kind: "coadd", extra: {} }];
+        jobs = [{ label: `Coaddition · ${usable.length} epochs`, kind: "coadd", extra: {} }];
       } else if (state.mode === "diff") {
-        if (usable.length < 2) return setMsg("Hace falta más de una época para restar.", true);
+        if (usable.length < 2) return setMsg("More than one epoch needed for difference mode.", true);
         if (!usable.some((e) => e.epoch === state.ref)) state.ref = usable[0].epoch;
         paintRef(usable);
         jobs = usable.filter((e) => e.epoch !== state.ref)
@@ -1082,11 +1082,10 @@
       }
       syncUrl();
 
-      // ---- carga progresiva: primero baja resolucion (se ensena segun llega),
-      // ---- despues alta resolucion en segundo plano reemplazando cada fotograma
+      // ---- progressive load: low res first, high res later in background
       let done = 0, failed = 0, showing = keepExisting;
       const progress = () => setMsg(done < jobs.length - failed
-        ? `Épocas listas: ${done}/${jobs.length - failed} (la primera vez tarda; después va desde caché)` : "");
+        ? `Epochs ready: ${done}/${jobs.length - failed} (first load takes a moment; cached afterward)` : "");
       if (!keepExisting) progress();
 
       const byIdx = new Map();   // indice del job -> fotograma
@@ -1147,7 +1146,7 @@
 
       if (keepExisting) {
         if (!newByIdx.size) {
-          if (viewerLoader) viewerLoader.fail("Sin datos válidos para esta selección.");
+          if (viewerLoader) viewerLoader.fail("No valid data for this selection.");
           return;
         }
         const oldFrames = frames;
@@ -1168,36 +1167,34 @@
         setTimeout(() => {
           oldFrames.forEach((f) => { if (f && f.url) URL.revokeObjectURL(f.url); });
         }, 150);
-        if (viewerLoader) viewerLoader.step(82, "Fotogramas listos · Maximizando resolución…");
+        if (viewerLoader) viewerLoader.step(82, "Frames ready · Maximizing resolution…");
       } else {
         lastLoadedCenter = { ra: state.ra, dec: state.dec };
-        if (viewerLoader) viewerLoader.step(82, "Fotogramas listos · Maximizando resolución…");
+        if (viewerLoader) viewerLoader.step(82, "Frames ready · Maximizing resolution…");
       }
 
       const validJobs = [...byIdx.entries()].sort((a, b) => a[0] - b[0]).map(([k, f]) => ({ idx0: k, f, job: jobs[k] }));
       if (!validJobs.length) {
-        if (viewerLoader) viewerLoader.fail("Sin datos válidos en esta banda para esta posición.");
+        if (viewerLoader) viewerLoader.fail("No valid data in this band for this position.");
         return;
       }
 
-      // escala de grises comun para todas las epocas (se aplica al pedir la alta resolucion)
+      // common greyscale for all epochs (applied when requesting high res)
       let lim = {};
       if (state.common && validJobs.length > 1) {
         lim = { vmin: Math.min(...validJobs.map((x) => x.f.meta.vmin)), vmax: Math.max(...validJobs.map((x) => x.f.meta.vmax)) };
       }
 
-      // fase 2: alta resolucion con concurrencia controlada (2 hilos) para no saturar CPU
+      // phase 2: high resolution with concurrency limit (2 threads)
       mapLimit(validJobs, 2, async (x) => {
         if (token !== loadToken) return;
         try {
           replaceFrame(x.idx0, await fetchFrame(frameUrl(x.job.kind, { ...x.job.extra, ...lim })));
-        } catch { /* se conserva la baja resolucion */ }
+        } catch { /* keep low res */ }
       }).then(() => {
-        // Solo tras completar la alta resolucion y si el usuario sigue en la misma vista,
-        // se programa el precalentamiento especulativo dosificado
         if (token === loadToken) {
           if (viewerLoader) {
-            viewerLoader.done(failed ? `${failed} época(s) sin datos válidos.` : "");
+            viewerLoader.done(failed ? `${failed} epoch(s) without valid data.` : "");
           }
           schedulePrefetch(state.ra, state.dec, state.fov, det);
         }
@@ -1253,7 +1250,7 @@
   function paintEpochs(det) {
     const ol = $("epochs"); ol.textContent = "";
     const nUse = epochs.filter((e) => (e.detectors[det] || 0) > 0).length;
-    if ($("epochCount")) $("epochCount").textContent = `${nUse}/${epochs.length} con imágenes`;
+    if ($("epochCount")) $("epochCount").textContent = `${nUse}/${epochs.length} with images`;
     epochs.forEach((e) => {
       const li = document.createElement("li");
       const n = e.detectors[det] || 0;
@@ -1270,18 +1267,18 @@
     s.value = state.ref;
   }
 
-  // ------------------------------------------------------------------ reproductor
+  // ------------------------------------------------------------------ player
   function show(k) {
     if (!frames.length) return;
     idx = (k + frames.length) % frames.length;
     const f = frames[idx];
-    grid = { size: f.meta.size, scale: f.meta.scale };   // la geometria sigue al fotograma mostrado
+    grid = { size: f.meta.size, scale: f.meta.scale };
     $("img").src = f.url;
     $("scrub").value = idx;
     $("frameLabel").textContent = `${idx + 1}/${frames.length} · ${f.label}`;
     const fovExactSec = (f.meta.size * f.meta.scale).toFixed(1);
     const fovExactMin = (fovExactSec / 60).toFixed(2);
-    $("frameMeta").textContent = `${f.meta.n} exp · FOV exacto: ${fovExactSec}″ (${fovExactMin}′)` + (f.meta.wl ? ` · λ≈${(+f.meta.wl).toFixed(2)} µm` : "") + ` · ${f.meta.scale}″/px`;
+    $("frameMeta").textContent = `${f.meta.n} exp · Exact FOV: ${fovExactSec}″ (${fovExactMin}′)` + (f.meta.wl ? ` · λ≈${(+f.meta.wl).toFixed(2)} µm` : "") + ` · ${f.meta.scale}″/px`;
     [...$("epochs").children].forEach((li) => li.classList.toggle("on", +li.dataset.epoch === f.epoch));
     drawOverlay();
   }
@@ -1471,23 +1468,23 @@
     if ($("pubFromSed")) $("pubFromSed").hidden = true;
     const controller = new AbortController();
     spectrumAbortController = controller;
-    if (chartLoader) chartLoader.start(`Midiendo 102 canales en ${ra.toFixed(4)}°, ${dec.toFixed(4)}°`);
-    drawChartLoading(`Midiendo 102 canales en ${ra.toFixed(4)}°, ${dec.toFixed(4)}°…`);
+    if (chartLoader) chartLoader.start(`Measuring 102 channels at ${ra.toFixed(4)}°, ${dec.toFixed(4)}°`);
+    drawChartLoading(`Measuring 102 channels at ${ra.toFixed(4)}°, ${dec.toFixed(4)}°…`);
     $("diag").textContent = "";
     try {
       const res = await fetch(`${API}/spectrum?ra=${ra.toFixed(5)}&dec=${dec.toFixed(5)}`, { signal: controller.signal });
       if (!res.ok) throw new Error(await errText(res));
       const s = await res.json();
       if (controller.signal.aborted) return;
-      if (chartLoader) chartLoader.done(`${s.n_exposures} exposiciones · apertura r = ${s.aperture_radius_px} px · ${ra.toFixed(5)}°, ${dec.toFixed(5)}°`);
+      if (chartLoader) chartLoader.done(`${s.n_exposures} exposures · aperture r = ${s.aperture_radius_px} px · ${ra.toFixed(5)}°, ${dec.toFixed(5)}°`);
       drawChart(s);
       if ($("pubFromSed")) $("pubFromSed").hidden = false;
-      const fmt = (v) => (v == null ? "sin datos" : (v * 100).toFixed(1) + " %");
-      $("diag").innerHTML = `<dt>Hielo de agua (3,05 µm)</dt><dd>${fmt(s.diagnostics["h2o_ice_3.05um_depth"])}</dd>` +
-        `<dt>CO₂ (4,27 µm)</dt><dd>${fmt(s.diagnostics["co2_4.27um_depth"])}</dd>`;
+      const fmt = (v) => (v == null ? "no data" : (v * 100).toFixed(1) + " %");
+      $("diag").innerHTML = `<dt>Water Ice (3.05 µm)</dt><dd>${fmt(s.diagnostics["h2o_ice_3.05um_depth"])}</dd>` +
+        `<dt>CO₂ (4.27 µm)</dt><dd>${fmt(s.diagnostics["co2_4.27um_depth"])}</dd>`;
     } catch (e) {
       if (e.name === "AbortError" || controller.signal.aborted) {
-        return; // Silencioso: usuario priorizó desplazamiento o zoom
+        return; // Silent: user prioritized drag or zoom
       }
       if (chartLoader) chartLoader.fail(e.message); else $("sedInfo").textContent = e.message;
     } finally {
@@ -1513,14 +1510,14 @@
     g.strokeStyle = "#252b33"; g.lineWidth = 1;
     g.strokeRect(L, T, W - L - R, H - T - B);
     g.fillStyle = "#8a94a1"; g.font = "12px system-ui, sans-serif"; g.textAlign = "center";
-    g.fillText(msg || "Extrayendo fotometría de 102 canales…", (L + W - R) / 2, (T + H - B) / 2);
+    g.fillText(msg || "Extracting 102-channel photometry…", (L + W - R) / 2, (T + H - B) / 2);
   }
   function drawChart(s) {
     window.SpherexChart.draw($("chart"), s);
   }
 
-  // ------------------------------------------------------------------ publicar en el foro
-  const MODE_NAME = { blink: "Blink", diff: "Diferencia", coadd: "Coadición" };
+  // ------------------------------------------------------------------ publish to forum
+  const MODE_NAME = { blink: "Blink", diff: "Difference", coadd: "Coaddition" };
   let pubTimer = null;
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -1539,23 +1536,23 @@
   }
   function openPublish(preferMarker = true) {
     if (state.ra == null || !frames.length) {
-      setMsg("Espera a que cargue la vista: se publica tal cual la estás viendo.", true);
+      setMsg("Wait for the view to finish loading: it publishes exactly as currently viewed.", true);
       return;
     }
     const dlg = $("pubDlg");
     const fine = state.band.startsWith("ch");
     const chips = [
-      fine ? `Canal ${state.band.slice(2)}` : `Detector ${state.band}`,
+      fine ? `Channel ${state.band.slice(2)}` : `Detector ${state.band}`,
       MODE_NAME[state.mode],
-      state.mode === "coadd" ? "1 fotograma" : `${frames.length} ${frames.length === 1 ? "época" : "épocas"}`,
-      `Campo ${Math.round(state.fov)}″`,
-      `Estirado ${state.stretch}`,
-      `${state.speed} ms por fotograma`,
+      state.mode === "coadd" ? "1 frame" : `${frames.length} ${frames.length === 1 ? "epoch" : "epochs"}`,
+      `Field ${Math.round(state.fov)}″`,
+      `Stretch ${state.stretch}`,
+      `${state.speed} ms per frame`,
     ];
-    if (state.mode === "diff") chips.push("Resta a la época de referencia");
-    if (state.invert) chips.push("Negativo");
-    chips.push(state.common ? "Misma escala en todas" : "Escala por época");
-    if (state.cross) chips.push("Retícula");
+    if (state.mode === "diff") chips.push("Reference epoch subtracted");
+    if (state.invert) chips.push("Negative");
+    chips.push(state.common ? "Same scale across all" : "Per-epoch scale");
+    if (state.cross) chips.push("Reticle");
     const ul = $("pubChips"); ul.textContent = "";
     chips.forEach((c) => { const li = document.createElement("li"); li.textContent = c; ul.appendChild(li); });
 
@@ -1564,7 +1561,7 @@
     const rCenter = dlg.querySelector('input[name="pubObj"][value="center"]');
     rMarker.disabled = !hasMarker;
     (hasMarker && preferMarker ? rMarker : rCenter).checked = true;
-    $("pubMarkerTxt").textContent = hasMarker ? fmtCoord(marker.ra, marker.dec) : "Haz clic sobre la imagen para marcar uno";
+    $("pubMarkerTxt").textContent = hasMarker ? fmtCoord(marker.ra, marker.dec) : "Click on the image to mark an object";
     $("pubCenterTxt").textContent = fmtCoord(state.ra, state.dec);
     $("pubObjHint").hidden = hasMarker;
     if (!$("pubTarget").value || $("pubTarget").dataset.auto === "1") {
@@ -1572,9 +1569,9 @@
     }
     $("pubAuthor").value = store.get("spherex.author", "");
     $("pubMsg").textContent = ""; $("pubMsg").classList.remove("err");
-    $("pubSend").disabled = false; $("pubSend").textContent = "Publicar";
+    $("pubSend").disabled = false; $("pubSend").textContent = "Publish";
 
-    // vista previa: los mismos fotogramas del visor, a la misma velocidad
+    // live preview: same frames from the viewer at current speed
     let k = 0;
     const tick = () => {
       if (!frames.length) return;
@@ -1593,7 +1590,7 @@
     if (ev && ev.preventDefault) ev.preventDefault();
     const title = $("pubTitle").value.trim();
     const msg = $("pubMsg");
-    if (title.length < 4) { msg.textContent = "Ponle un título de al menos 4 caracteres."; msg.classList.add("err"); $("pubTitle").focus(); return; }
+    if (title.length < 4) { msg.textContent = "Please enter a title of at least 4 characters."; msg.classList.add("err"); $("pubTitle").focus(); return; }
     const useMarker = $("pubDlg").querySelector('input[name="pubObj"]:checked')?.value === "marker" && marker;
     const view = {
       ra: state.ra, dec: state.dec, fov: Math.round(state.fov), band: state.band, mode: state.mode,
@@ -1604,8 +1601,8 @@
       title, body: $("pubBody").value, author: $("pubAuthor").value.trim(), target: $("pubTarget").value.trim(),
       view, object: useMarker ? { ra: marker.ra, dec: marker.dec } : null,
     };
-    $("pubSend").disabled = true; $("pubSend").textContent = "Publicando…";
-    msg.classList.remove("err"); msg.textContent = "Enviando…";
+    $("pubSend").disabled = true; $("pubSend").textContent = "Publishing…";
+    msg.classList.remove("err"); msg.textContent = "Sending…";
     try {
       const r = await fetch(`${API}/forum/posts`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
@@ -1617,13 +1614,13 @@
       safeOwned[out.id] = out.owner_token;
       store.set("spherex.owned", safeOwned);
       if (payload.author) store.set("spherex.author", payload.author);
-      msg.textContent = "¡Publicado! Abriendo el foro…";
+      msg.textContent = "Published! Opening forum…";
       setTimeout(() => {
         location.href = `/forum.html#p/${out.id}`;
       }, 350);
     } catch (e) {
-      msg.textContent = (e && e.message) ? e.message : "Error al publicar"; msg.classList.add("err");
-      $("pubSend").disabled = false; $("pubSend").textContent = "Publicar";
+      msg.textContent = (e && e.message) ? e.message : "Error publishing"; msg.classList.add("err");
+      $("pubSend").disabled = false; $("pubSend").textContent = "Publish";
     }
   }
   function setupPublish() {
@@ -1665,11 +1662,11 @@
       const s = await getJson(`${API}/cache/stats`), r = s.redis, d = s.disk || {};
       const gb = (b) => (b / 1073741824).toFixed(2) + " GB";
       let t = r.backend === "redis" && !r.error
-        ? `Redis ${r.used_memory_human}${r.maxmemory_bytes ? " / " + gb(r.maxmemory_bytes) : ""} · ${r.keys} claves · aciertos ${r.hit_rate == null ? "—" : (r.hit_rate * 100).toFixed(0) + " %"} · ${r.ops_per_sec} ops/s`
-        : "Redis no disponible (caché local)";
-      if (d.fits_bytes != null) t += ` · NVMe ${gb(d.fits_bytes)} en ${d.fits_files} FITS`;
-      $("stats").textContent = "caché: " + t;
-    } catch { $("stats").textContent = "caché: sin conexión con la API"; }
+        ? `Redis ${r.used_memory_human}${r.maxmemory_bytes ? " / " + gb(r.maxmemory_bytes) : ""} · ${r.keys} keys · hit rate ${r.hit_rate == null ? "—" : (r.hit_rate * 100).toFixed(0) + " %"} · ${r.ops_per_sec} ops/s`
+        : "Redis unavailable (local cache)";
+      if (d.fits_bytes != null) t += ` · NVMe ${gb(d.fits_bytes)} across ${d.fits_files} FITS`;
+      $("stats").textContent = "cache: " + t;
+    } catch { $("stats").textContent = "cache: no API connection"; }
   }
 
   // ------------------------------------------------------------------ tooltips universales en hover
@@ -1794,7 +1791,7 @@
     }
     if (startPublish) {
       if (frames.length) openPublish(true);
-      else setMsg("Elige un objetivo, haz clic sobre el objeto y pulsa «Publicar en el foro».");
+      else setMsg("Choose a target, click on an object, and click «Publish to forum».");
     }
   });
   stats(); setInterval(stats, 20000);

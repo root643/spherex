@@ -30,14 +30,14 @@
     g.beginPath(); g.moveTo(L, T); g.lineTo(L, H - B); g.lineTo(W - R, H - B); g.stroke();
     g.textAlign = "center";
     for (let v = 1; v <= 5; v++) { g.fillText(v + "", X(v), H - B + 14); g.beginPath(); g.moveTo(X(v), H - B); g.lineTo(X(v), H - B + 4); g.stroke(); }
-    g.fillText("longitud de onda (µm)", (L + W - R) / 2, H - 6);
+    g.fillText("wavelength (µm)", (L + W - R) / 2, H - 6);
     g.textAlign = "right";
     for (let i = 0; i <= 4; i++) {
       const v = lo + (hi - lo) * i / 4;
       g.fillText(Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(Math.abs(hi) < 10 ? 2 : 0), L - 6, Y(v) + 4);
       g.strokeStyle = "rgba(255,255,255,.05)"; g.beginPath(); g.moveTo(L, Y(v)); g.lineTo(W - R, Y(v)); g.stroke();
     }
-    g.save(); g.translate(12, (T + H - B) / 2); g.rotate(-Math.PI / 2); g.textAlign = "center"; g.fillText("flujo (µJy)", 0, 0); g.restore();
+    g.save(); g.translate(12, (T + H - B) / 2); g.rotate(-Math.PI / 2); g.textAlign = "center"; g.fillText("flux (µJy)", 0, 0); g.restore();
     // marcas diagnosticas
     [[3.05, "H₂O"], [4.27, "CO₂"]].forEach(([wl, name]) => {
       g.strokeStyle = "rgba(127,209,185,.6)"; g.setLineDash([3, 3]);
