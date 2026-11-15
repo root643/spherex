@@ -163,7 +163,13 @@ label output { color: var(--text); font-family: var(--mono); float: right; }
   background: rgba(var(--accent-rgb), .1); color: var(--accent); border: 1px solid rgba(var(--accent-rgb), .45); text-decoration: none; cursor: pointer; }
 .publish-btn:hover { background: rgba(var(--accent-rgb), .18); border-color: var(--accent); }
 .publish-btn::before { content: "＋ "; }
-.sed .publish-btn { margin: -6px 0 14px; }
+.sed-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.sed-actions button { width: 100%; padding: 8px 12px; font-size: 13.5px; font-weight: 600; border-radius: 6px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; }
+.sed-actions .publish-btn { margin: 0; background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); }
+.sed-actions .publish-btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.sed-actions .export-btn { background: #141920; color: var(--text); border: 1px solid var(--line); }
+.sed-actions .export-btn:hover { background: #1e2530; border-color: #3a434e; }
 
 /* ======================================================================= publicar (dialogo) */
 .pub-dlg { width: min(860px, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 0; color: var(--text);

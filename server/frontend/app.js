@@ -1628,7 +1628,13 @@
   if (state.ra == null) { Object.assign(state, { ra: TARGETS[0].ra, dec: TARGETS[0].dec, fov: TARGETS[0].fov, band: TARGETS[0].band }); }
   setupPublish();
   // secciones plegables: se recuerda si cada una estaba abierta o cerrada
+  // la seccion "image" se mantiene cerrada de forma automatica al cargar
   document.querySelectorAll("details.fold").forEach((d) => {
+    if (d.dataset.fold === "image") {
+      d.open = false;
+      try { localStorage.removeItem("spherex.fold.image"); } catch { /* sin almacenamiento */ }
+      return;
+    }
     const key = "spherex.fold." + d.dataset.fold;
     try { const v = localStorage.getItem(key); if (v != null) d.open = v === "1"; } catch { /* sin almacenamiento */ }
     d.addEventListener("toggle", () => { try { localStorage.setItem(key, d.open ? "1" : "0"); } catch { /* idem */ } });

@@ -6,7 +6,7 @@
 <title>SPHEREx Blink · visor temporal de 102 bandas</title>
 <meta name="description" content="Visor tipo WiseView para las imágenes de NASA SPHEREx: parpadeo entre épocas, diferencia, coadición y espectro de 102 canales.">
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css?v=17">
+<link rel="stylesheet" href="style.css?v=18">
 </head>
 <body>
 <header class="top">
@@ -82,7 +82,7 @@
       </label>
     </section>
 
-    <details class="fold" data-fold="image" open>
+    <details class="fold" data-fold="image">
       <summary><h2>Imagen</h2></summary>
       <div class="row2">
         <label>Estirado
@@ -119,11 +119,7 @@
     </section>
 
     <button id="apply" class="primary" type="button">Actualizar vista</button>
-    <div class="row2">
-      <button id="share" type="button">Copiar enlace</button>
-      <button id="exportGif" type="button" title="Exportar animación GIF de las épocas">Exportar GIF</button>
-    </div>
-    <button id="publish" class="publish-btn" type="button" title="Publicar esta vista y el espectro del objeto marcado en el foro">Publicar en el foro</button>
+    <button id="share" type="button">Copiar enlace</button>
   </aside>
 
   <section class="viewer" aria-label="Visor">
@@ -165,11 +161,14 @@
       <canvas id="chart"></canvas>
     </div>
     <dl id="diag" class="diag"></dl>
-    <button id="pubFromSed" class="publish-btn" type="button" hidden>Publicar este objeto en el foro</button>
     <details class="fold" data-fold="epochs" open>
       <summary><h2>Épocas</h2><span id="epochCount" class="fold-note mono"></span></summary>
       <ol id="epochs" class="epochs"></ol>
     </details>
+    <div class="sed-actions">
+      <button id="publish" class="publish-btn" type="button" title="Publicar esta vista y el espectro del objeto marcado en el foro">Publicar en el foro</button>
+      <button id="exportGif" class="export-btn" type="button" title="Exportar animación GIF de las épocas">🎬 Exportar GIF</button>
+    </div>
   </aside>
 </main>
 
@@ -224,6 +223,6 @@
   </form>
 </dialog>
 <script src="chart.js?v=2"></script>
-<script src="app.js?v=16"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>
