@@ -35,6 +35,7 @@
   let idx = 0, timer = null, playing = true, loadToken = 0;
   let grid = { size: 0, scale: 0 };  // rejilla del fotograma actual (px, arcsec/px)
   let marker = null;        // {ra, dec} del ultimo clic
+  let targetName = "";      // nombre del ultimo objetivo elegido o buscado (para el foro)
   let baseFov = state.fov;  // FOV de los fotogramas cargados en el visor
   let zoomDebounceTimer = null;
   let panOffset = { x: 0, y: 0 };
@@ -117,6 +118,7 @@
     if (!state.cross) q.set("cross", "0");
     if (state.gaia) q.set("gaia", "1");
     if (state.wise) q.set("wise", "1");
+    if (marker) { q.set("mra", marker.ra.toFixed(5)); q.set("mdec", marker.dec.toFixed(5)); }
     history.replaceState(null, "", "?" + q.toString());
   }
 
@@ -270,7 +272,7 @@
     state.dec = t.dec;
     if (t.fov) state.fov = t.fov;
     if (t.band) state.band = t.band;
-    marker = null;
+    marker = null; targetName = t.name || "";
     paintControls();
     syncUrl();
     setMsg(`🎲 Coordenadas aleatorias: ${t.name} (${t.type || "Interés científico"})`);
@@ -420,7 +422,7 @@
     TARGETS.forEach((t) => {
       const b = document.createElement("button");
       b.type = "button"; b.textContent = t.name; b.title = t.q;
-      b.onclick = () => { Object.assign(state, { ra: t.ra, dec: t.dec, fov: t.fov, band: t.band }); marker = null; reload(); };
+      b.onclick = () => { Object.assign(state, { ra: t.ra, dec: t.dec, fov: t.fov, band: t.band }); marker = null; targetName = t.q; reload(); };
       $("targets").appendChild(b);
     });
     for (let d = 1; d <= 6; d++) {
@@ -598,7 +600,7 @@
         const r = await getJson(`${API}/targets/search?q=${encodeURIComponent(q)}`);
         if (!r.results.length) return setMsg("No se encontró «" + q + "».", true);
         const t = r.results[0];
-        state.ra = t.ra; state.dec = t.dec; marker = null;
+        state.ra = t.ra; state.dec = t.dec; marker = null; targetName = t.name || q;
         reload();
       } catch (e) { setMsg(e.message, true); }
     };
@@ -1401,6 +1403,8 @@
   // ------------------------------------------------------------------ espectro
   async function loadSpectrum(ra, dec) {
     abortSpectrum();
+    syncUrl();
+    if ($("pubFromSed")) $("pubFromSed").hidden = true;
     const controller = new AbortController();
     spectrumAbortController = controller;
     if (chartLoader) chartLoader.start(`Midiendo 102 canales en ${ra.toFixed(4)}°, ${dec.toFixed(4)}°`);
@@ -1413,6 +1417,7 @@
       if (controller.signal.aborted) return;
       if (chartLoader) chartLoader.done(`${s.n_exposures} exposiciones · apertura r = ${s.aperture_radius_px} px · ${ra.toFixed(5)}°, ${dec.toFixed(5)}°`);
       drawChart(s);
+      if ($("pubFromSed")) $("pubFromSed").hidden = false;
       const fmt = (v) => (v == null ? "sin datos" : (v * 100).toFixed(1) + " %");
       $("diag").innerHTML = `<dt>Hielo de agua (3,05 µm)</dt><dd>${fmt(s.diagnostics["h2o_ice_3.05um_depth"])}</dd>` +
         `<dt>CO₂ (4,27 µm)</dt><dd>${fmt(s.diagnostics["co2_4.27um_depth"])}</dd>`;
@@ -1447,52 +1452,122 @@
     g.fillText(msg || "Extrayendo fotometría de 102 canales…", (L + W - R) / 2, (T + H - B) / 2);
   }
   function drawChart(s) {
-    const c = $("chart"), g = c.getContext("2d"), dpr = window.devicePixelRatio || 1;
-    const W = Math.max(280, c.clientWidth), H = Math.round(W * 0.7);
-    c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const L = 50, R = 10, T = 14, B = 34, x0 = 0.75, x1 = 5.0;
-    g.clearRect(0, 0, W, H);
-    const ch = s.channels.filter((p) => p.flux_ujy != null);
-    const vals = ch.length ? ch.map((p) => p.flux_ujy) : s.points.map((p) => p.flux_ujy);
-    let lo = Math.min(0, ...vals), hi = Math.max(...vals);
-    if (!(hi > lo)) hi = lo + 1;
-    const pad = (hi - lo) * 0.12; hi += pad; if (lo < 0) lo -= pad;
-    const X = (v) => L + (v - x0) / (x1 - x0) * (W - L - R), Y = (v) => H - B - (v - lo) / (hi - lo) * (H - T - B);
-    // detectores
-    for (let d = 1; d <= 6; d++) {
-      g.fillStyle = d % 2 ? "rgba(255,255,255,.03)" : "rgba(255,255,255,0)";
-      g.fillRect(X(DET[d][0]), T, X(DET[d][1]) - X(DET[d][0]), H - T - B);
-      g.fillStyle = DET_COLOR[d - 1]; g.font = "10px ui-monospace, monospace"; g.textAlign = "center";
-      g.fillText("D" + d, (X(DET[d][0]) + X(DET[d][1])) / 2, T + 10);
+    window.SpherexChart.draw($("chart"), s);
+  }
+
+  // ------------------------------------------------------------------ publicar en el foro
+  const MODE_NAME = { blink: "Blink", diff: "Diferencia", coadd: "Coadición" };
+  let pubTimer = null;
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* sin almacenamiento */ } },
+  };
+  const fmtCoord = (ra, dec) => `${ra.toFixed(5)}°, ${dec >= 0 ? "+" : ""}${dec.toFixed(5)}°`;
+
+  function commonLimitsOfFrames() {
+    const vmins = frames.map((f) => f.meta && f.meta.vmin).filter((v) => typeof v === "number" && isFinite(v));
+    const vmaxs = frames.map((f) => f.meta && f.meta.vmax).filter((v) => typeof v === "number" && isFinite(v));
+    return vmins.length && vmaxs.length ? { vmin: Math.min(...vmins), vmax: Math.max(...vmaxs) } : {};
+  }
+  function guessTargetName() {
+    const t = TARGETS.find((x) => Math.abs(x.ra - state.ra) < 1e-3 && Math.abs(x.dec - state.dec) < 1e-3);
+    return t ? t.q : targetName;
+  }
+  function openPublish(preferMarker = true) {
+    if (state.ra == null || !frames.length) {
+      setMsg("Espera a que cargue la vista: se publica tal cual la estás viendo.", true);
+      return;
     }
-    // ejes
-    g.strokeStyle = "#3a434e"; g.fillStyle = "#8a94a1"; g.lineWidth = 1; g.font = "11px ui-monospace, monospace";
-    g.beginPath(); g.moveTo(L, T); g.lineTo(L, H - B); g.lineTo(W - R, H - B); g.stroke();
-    g.textAlign = "center";
-    for (let v = 1; v <= 5; v++) { g.fillText(v + "", X(v), H - B + 14); g.beginPath(); g.moveTo(X(v), H - B); g.lineTo(X(v), H - B + 4); g.stroke(); }
-    g.fillText("longitud de onda (µm)", (L + W - R) / 2, H - 6);
-    g.textAlign = "right";
-    for (let i = 0; i <= 4; i++) {
-      const v = lo + (hi - lo) * i / 4;
-      g.fillText(Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(Math.abs(hi) < 10 ? 2 : 0), L - 6, Y(v) + 4);
-      g.strokeStyle = "rgba(255,255,255,.05)"; g.beginPath(); g.moveTo(L, Y(v)); g.lineTo(W - R, Y(v)); g.stroke();
+    const dlg = $("pubDlg");
+    const fine = state.band.startsWith("ch");
+    const chips = [
+      fine ? `Canal ${state.band.slice(2)}` : `Detector ${state.band}`,
+      MODE_NAME[state.mode],
+      state.mode === "coadd" ? "1 fotograma" : `${frames.length} ${frames.length === 1 ? "época" : "épocas"}`,
+      `Campo ${Math.round(state.fov)}″`,
+      `Estirado ${state.stretch}`,
+      `${state.speed} ms por fotograma`,
+    ];
+    if (state.mode === "diff") chips.push("Resta a la época de referencia");
+    if (state.invert) chips.push("Negativo");
+    chips.push(state.common ? "Misma escala en todas" : "Escala por época");
+    if (state.cross) chips.push("Retícula");
+    const ul = $("pubChips"); ul.textContent = "";
+    chips.forEach((c) => { const li = document.createElement("li"); li.textContent = c; ul.appendChild(li); });
+
+    const hasMarker = !!marker;
+    const rMarker = dlg.querySelector('input[name="pubObj"][value="marker"]');
+    const rCenter = dlg.querySelector('input[name="pubObj"][value="center"]');
+    rMarker.disabled = !hasMarker;
+    (hasMarker && preferMarker ? rMarker : rCenter).checked = true;
+    $("pubMarkerTxt").textContent = hasMarker ? fmtCoord(marker.ra, marker.dec) : "Haz clic sobre la imagen para marcar uno";
+    $("pubCenterTxt").textContent = fmtCoord(state.ra, state.dec);
+    $("pubObjHint").hidden = hasMarker;
+    if (!$("pubTarget").value || $("pubTarget").dataset.auto === "1") {
+      $("pubTarget").value = guessTargetName(); $("pubTarget").dataset.auto = "1";
     }
-    g.save(); g.translate(12, (T + H - B) / 2); g.rotate(-Math.PI / 2); g.textAlign = "center"; g.fillText("flujo (µJy)", 0, 0); g.restore();
-    // marcas diagnosticas
-    [[3.05, "H₂O"], [4.27, "CO₂"]].forEach(([wl, name]) => {
-      g.strokeStyle = "rgba(127,209,185,.6)"; g.setLineDash([3, 3]);
-      g.beginPath(); g.moveTo(X(wl), T + 14); g.lineTo(X(wl), H - B); g.stroke(); g.setLineDash([]);
-      g.fillStyle = "#7fd1b9"; g.textAlign = "center"; g.fillText(name, X(wl), T + 24);
-    });
-    // puntos individuales
-    g.save(); g.beginPath(); g.rect(L, T, W - L - R, H - T - B); g.clip();
-    s.points.forEach((p) => { g.fillStyle = DET_COLOR[p.detector - 1] + "55"; g.fillRect(X(p.wavelength) - 1, Y(p.flux_ujy) - 1, 2, 2); });
-    // medianas por canal
-    g.strokeStyle = "#ffb454"; g.lineWidth = 1.5; g.beginPath();
-    ch.forEach((p, i) => (i ? g.lineTo(X(p.wavelength), Y(p.flux_ujy)) : g.moveTo(X(p.wavelength), Y(p.flux_ujy))));
-    g.stroke();
-    ch.forEach((p) => { g.fillStyle = DET_COLOR[p.detector - 1]; g.beginPath(); g.arc(X(p.wavelength), Y(p.flux_ujy), 2.2, 0, 2 * Math.PI); g.fill(); });
-    g.restore();
+    $("pubAuthor").value = store.get("spherex.author", "");
+    $("pubMsg").textContent = ""; $("pubMsg").classList.remove("err");
+    $("pubSend").disabled = false; $("pubSend").textContent = "Publicar";
+
+    // vista previa: los mismos fotogramas del visor, a la misma velocidad
+    let k = 0;
+    const tick = () => {
+      if (!frames.length) return;
+      const f = frames[k % frames.length];
+      $("pubImg").src = f.url;
+      $("pubFrame").textContent = frames.length > 1 ? `${k % frames.length + 1}/${frames.length} · ${f.label}` : f.label;
+      k++;
+    };
+    clearInterval(pubTimer); tick();
+    if (frames.length > 1) pubTimer = setInterval(tick, state.speed);
+    pause();
+    dlg.showModal();
+    $("pubTitle").focus();
+  }
+  async function sendPublish(ev) {
+    ev.preventDefault();
+    const title = $("pubTitle").value.trim();
+    const msg = $("pubMsg");
+    if (title.length < 4) { msg.textContent = "Ponle un título de al menos 4 caracteres."; msg.classList.add("err"); $("pubTitle").focus(); return; }
+    const useMarker = $("pubDlg").querySelector('input[name="pubObj"]:checked')?.value === "marker" && marker;
+    const view = {
+      ra: state.ra, dec: state.dec, fov: Math.round(state.fov), band: state.band, mode: state.mode,
+      stretch: state.stretch, invert: state.invert, speed: state.speed, ref: state.ref,
+      common: state.common, cross: state.cross, ...(state.common ? commonLimitsOfFrames() : {}),
+    };
+    const payload = {
+      title, body: $("pubBody").value, author: $("pubAuthor").value.trim(), target: $("pubTarget").value.trim(),
+      view, object: useMarker ? { ra: marker.ra, dec: marker.dec } : null,
+    };
+    $("pubSend").disabled = true; $("pubSend").textContent = "Publicando…";
+    msg.classList.remove("err"); msg.textContent = "Enviando…";
+    try {
+      const r = await fetch(`${API}/forum/posts`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error(await errText(r));
+      const out = await r.json();
+      const owned = store.get("spherex.owned", {});
+      owned[out.id] = out.owner_token;
+      store.set("spherex.owned", owned);
+      store.set("spherex.author", payload.author);
+      msg.textContent = "¡Publicado! Abriendo el foro…";
+      location.href = `/forum.html#p/${out.id}`;
+    } catch (e) {
+      msg.textContent = e.message; msg.classList.add("err");
+      $("pubSend").disabled = false; $("pubSend").textContent = "Publicar";
+    }
+  }
+  function setupPublish() {
+    $("publish").onclick = () => openPublish(true);
+    $("pubFromSed").onclick = () => openPublish(true);
+    $("pubForm").onsubmit = sendPublish;
+    $("pubCancel").onclick = $("pubClose").onclick = () => $("pubDlg").close();
+    $("pubTarget").oninput = () => { $("pubTarget").dataset.auto = "0"; };
+    $("pubDlg").addEventListener("close", () => { clearInterval(pubTimer); pubTimer = null; });
+    // clic en el fondo oscuro: cerrar
+    $("pubDlg").addEventListener("click", (ev) => { if (ev.target === $("pubDlg")) $("pubDlg").close(); });
   }
 
   // ------------------------------------------------------------------ estadisticas
@@ -1512,5 +1587,18 @@
   chartLoader = createBufferLoader($("chartBuffer"), $("sedInfo"));
   buildControls(); paintControls();
   if (state.ra == null) { Object.assign(state, { ra: TARGETS[0].ra, dec: TARGETS[0].dec, fov: TARGETS[0].fov, band: TARGETS[0].band }); }
-  reload(); stats(); setInterval(stats, 20000);
+  setupPublish();
+  // enlaces desde el foro: ?mra=&mdec= marca el objeto y mide su espectro; ?publish=1 abre el formulario
+  const startMarker = P.has("mra") && P.has("mdec") ? { ra: num("mra", NaN), dec: num("mdec", NaN) } : null;
+  const startPublish = P.get("publish") === "1";
+  Promise.resolve(reload()).then(() => {
+    if (startMarker && isFinite(startMarker.ra) && isFinite(startMarker.dec) && Math.abs(startMarker.dec) <= 90) {
+      marker = startMarker; drawOverlay(); loadSpectrum(marker.ra, marker.dec);
+    }
+    if (startPublish) {
+      if (frames.length) openPublish(true);
+      else setMsg("Elige un objetivo, haz clic sobre el objeto y pulsa «Publicar en el foro».");
+    }
+  });
+  stats(); setInterval(stats, 20000);
 })();

@@ -10,7 +10,7 @@ import math
 import warnings
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 # Rangos nominales de los 6 detectores LVF de SPHEREx (micras)
 DETECTORS = {
@@ -204,12 +204,22 @@ def render_webp(arr: np.ndarray, vmin: float, vmax: float, stretch: str = "asinh
 def render_gif(frames_data: list[tuple[np.ndarray, dict]],
                stretch: str = "asinh", invert: bool = False, diff: bool = False,
                duration_ms: int = 500, watermark: bool = True,
-               vmin: float | None = None, vmax: float | None = None) -> bytes:
-    """Genera un GIF animado ultra-rapido a partir de una secuencia de epocas (arr, meta)."""
+               vmin: float | None = None, vmax: float | None = None,
+               scale_to: int | None = None, cross: bool = False,
+               marker: tuple[float, float] | None = None, common: bool = True) -> bytes:
+    """Genera un GIF animado ultra-rapido a partir de una secuencia de epocas (arr, meta).
+
+    scale_to: lado en pixeles al que se amplia cada fotograma (vecino mas proximo,
+    como el visor) para que el texto y las marcas se lean bien.
+    common=False: cada fotograma con su propia escala de grises (como el visor con
+    "misma escala" desmarcado). cross: reticula central. marker: (x, y) del objeto en fraccion del ancho/alto
+    desde la esquina superior izquierda; se dibuja un circulo como en el visor.
+    """
     if not frames_data:
         raise ValueError("Sin fotogramas para generar GIF")
 
-    if vmin is None or vmax is None:
+    per_frame = not common and (vmin is None or vmax is None)
+    if (vmin is None or vmax is None) and not per_frame:
         all_vmins, all_vmaxs = [], []
         for arr, _ in frames_data:
             lo, hi = auto_limits(arr, diff)
@@ -218,23 +228,42 @@ def render_gif(frames_data: list[tuple[np.ndarray, dict]],
         vmin = min(all_vmins) if all_vmins else -0.05
         vmax = max(all_vmaxs) if all_vmaxs else 1.0
 
+    font = None
+    if scale_to:
+        try:
+            font = ImageFont.load_default(size=max(12, scale_to // 30))
+        except TypeError:          # Pillow < 10.1: solo la fuente pequena
+            font = ImageFont.load_default()
     pil_images: list[Image.Image] = []
     for arr, meta in frames_data:
-        g = to_gray(arr, vmin, vmax, stretch, invert, diff)
+        lo, hi = auto_limits(arr, diff) if per_frame else (vmin, vmax)
+        g = to_gray(arr, lo, hi, stretch, invert, diff)
         im = Image.fromarray(g).convert("RGB")
+        if scale_to and im.size[0] < scale_to:
+            im = im.resize((scale_to, round(scale_to * im.size[1] / im.size[0])), Image.Resampling.NEAREST)
         w, h = im.size
+        draw = ImageDraw.Draw(im)
+        if cross:
+            cx, cy, a, b = w / 2, h / 2, max(4, w // 60), max(11, w // 22)
+            for x1, y1, x2, y2 in ((-b, 0, -a, 0), (a, 0, b, 0), (0, -b, 0, -a), (0, a, 0, b)):
+                draw.line((cx + x1, cy + y1, cx + x2, cy + y2), fill=(255, 180, 84), width=max(1, w // 400))
+        if marker is not None:
+            mx, my, r = marker[0] * w, marker[1] * h, max(6, w // 45)
+            if -r <= mx <= w + r and -r <= my <= h + r:
+                draw.ellipse((mx - r, my - r, mx + r, my + r), outline=(127, 209, 185), width=max(2, w // 300))
 
         if watermark:
-            draw = ImageDraw.Draw(im)
             date_str = str(meta.get("date", ""))
+            pad = 8 if not scale_to else max(8, w // 50)
             if date_str:
-                draw.text((9, 9), date_str, fill=(0, 0, 0))
-                draw.text((8, 8), date_str, fill=(255, 180, 84))
+                draw.text((pad + 1, pad + 1), date_str, fill=(0, 0, 0), font=font)
+                draw.text((pad, pad), date_str, fill=(255, 180, 84), font=font)
 
             sub = str(meta.get("label_sub", "SPHEREx"))
             if sub:
-                draw.text((9, h - 19), sub, fill=(0, 0, 0))
-                draw.text((8, h - 20), sub, fill=(180, 195, 210))
+                fh = (font.getbbox("Ag")[3] if font is not None and hasattr(font, "getbbox") else 10) + 2
+                draw.text((pad + 1, h - pad - fh + 1), sub, fill=(0, 0, 0), font=font)
+                draw.text((pad, h - pad - fh), sub, fill=(180, 195, 210), font=font)
 
         pal = im.convert("P", palette=Image.Palette.ADAPTIVE)
         pil_images.append(pal)

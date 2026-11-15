@@ -67,9 +67,11 @@ say "Entorno Python en /opt/spherex-env"
 say "Copiando backend y frontend"
 rm -rf /opt/spherex-backend /var/www/spherex-frontend
 mkdir -p /opt/spherex-backend /var/www/spherex-frontend /var/cache/spherex/fits /var/cache/nginx/spherex
+# datos del foro (publicaciones, votos, GIF y espectros): fuera de lo que se borra en cada despliegue
+mkdir -p /var/lib/spherex/forum/media
 cp -r "$SRC/backend/." /opt/spherex-backend/
 cp -r "$SRC/frontend/." /var/www/spherex-frontend/
-chown -R "$RUN_USER":"$RUN_USER" /opt/spherex-backend /var/cache/spherex
+chown -R "$RUN_USER":"$RUN_USER" /opt/spherex-backend /var/cache/spherex /var/lib/spherex
 chown -R www-data:www-data /var/cache/nginx/spherex
 chmod -R a+rX /var/www/spherex-frontend
 
@@ -107,6 +109,7 @@ WorkingDirectory=/opt/spherex-backend
 Environment=SPHEREX_FITS_DIR=/var/cache/spherex/fits
 Environment=SPHEREX_REDIS_URL=redis://127.0.0.1:6379/0
 Environment=SPHEREX_AWS_CUTOUT=http://127.0.0.1:9600/cutout?token=${AWS_TOKEN}
+Environment=SPHEREX_FORUM_DIR=/var/lib/spherex/forum
 ExecStart=/opt/spherex-env/bin/uvicorn main:app --workers ${WORKERS} --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=3
@@ -194,6 +197,8 @@ check "search (CDS Sesame)"      "$B/api/v1/targets/search?q=Proxima%20Centauri"
 check "observations (Barnard)"   "$B/api/v1/observations?ra=269.4521&dec=4.6934" 120
 check "frame WebP (Barnard, D2)" "$B/api/v1/cutout/frame?ra=269.4521&dec=4.6934&fov=240&epoch=0&band=D2" 280
 check "spectrum (Barnard)"       "$B/api/v1/spectrum?ra=269.4521&dec=4.6934" 290
+check "foro (lista)"             "$B/api/v1/forum/posts?sort=new&limit=1"
+check "foro (pagina)"            "$B/forum.html"
 
 # lectura directa del bucket de AWS, sin caches (las pruebas de arriba pueden salir de Redis/Nginx)
 echo "  Lectura directa de AWS S3 (3 recortes de Barnard, sin cache):"

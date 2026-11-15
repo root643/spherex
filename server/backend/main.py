@@ -20,6 +20,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 
 import catalogs
+import forum
 import imaging
 import targets
 import upstream
@@ -338,16 +339,28 @@ def cutout_coadd(ra: float = RA, dec: float = DEC, fov: float = FOV, band: str =
     return _image_response(arr, meta, stretch, invert, False, vmin, vmax)
 
 
-@app.get("/api/v1/cutout/gif")
-def cutout_gif(ra: float = RA, dec: float = DEC, fov: float = FOV, band: str = Query("D4"),
-               mode: str = Query("blink", pattern="^(blink|diff)$"),
-               stretch: str = Query("asinh"), invert: bool = False,
-               ref: int = Query(0, ge=0), speed: int = Query(500, ge=50, le=2000),
-               res: str = Query("high", pattern="^(low|high)$"),
-               watermark: bool = Query(True),
-               vmin: Optional[float] = None, vmax: Optional[float] = None):
-    """Genera al vuelo una animacion GIF de las epocas de esa posicion (blink o diferencia).
-    Ultra-rapido: recupera los arrays de Redis y compone el GIF en milisegundos."""
+def _sky_frac(ra0: float, dec0: float, ra: float, dec: float, span_arcsec: float) -> tuple[float, float]:
+    """Posicion de (ra, dec) en una vista TAN centrada en (ra0, dec0), como fraccion del
+    ancho/alto desde la esquina superior izquierda (norte arriba, este a la izquierda)."""
+    d2r = np.pi / 180.0
+    a, d, d0 = (ra - ra0) * d2r, dec * d2r, dec0 * d2r
+    cosc = np.sin(d0) * np.sin(d) + np.cos(d0) * np.cos(d) * np.cos(a)
+    xi = np.cos(d) * np.sin(a) / cosc
+    eta = (np.cos(d0) * np.sin(d) - np.sin(d0) * np.cos(d) * np.cos(a)) / cosc
+    span = span_arcsec / 3600.0 * d2r
+    return float(0.5 - xi / span), float(0.5 - eta / span)
+
+
+def make_gif(ra: float, dec: float, fov: float, band: str, mode: str = "blink", stretch: str = "asinh",
+             invert: bool = False, ref: int = 0, speed: int = 500, res: str = "high",
+             watermark: bool = True, vmin: float | None = None, vmax: float | None = None,
+             scale_to: int | None = None, cross: bool = False,
+             marker: tuple[float, float] | None = None, common: bool = True) -> tuple[bytes, int]:
+    """GIF de las epocas de una posicion (blink, diferencia o coadicion de un fotograma).
+    Recupera los arrays de Redis si ya se vieron en el visor. Devuelve (bytes, n_fotogramas).
+    marker: (ra, dec) de un objeto a rodear con un circulo."""
+    if stretch not in imaging.STRETCHES:
+        raise HTTPException(422, "stretch debe ser asinh, linear, log o sqrt")
     ra, dec = _r(ra, dec)
     fov = round(float(fov), 2)
     det, lmin, lmax = _band(band)
@@ -355,9 +368,16 @@ def cutout_gif(ra: float = RA, dec: float = DEC, fov: float = FOV, band: str = Q
     usable_epochs = sorted({e["epoch"] for e in exps if e["detector"] == det})
     if not usable_epochs:
         raise HTTPException(404, f"No hay observaciones de SPHEREx en {band} para esa posicion")
+    sub = f'SPHEREx · {band} · {int(fov)}"'
 
     frames_data: list[tuple[np.ndarray, dict]] = []
-    if mode == "diff":
+    if mode == "coadd":
+        arr, meta = build_array(ra, dec, fov, det, lmin, lmax, exps, "median", MAX_PER_COADD, res)
+        meta_copy = dict(meta)
+        meta_copy["date"] = f"Coadicion · {len(usable_epochs)} epocas"
+        meta_copy["label_sub"] = sub
+        frames_data.append((arr, meta_copy))
+    elif mode == "diff":
         if len(usable_epochs) < 2:
             raise HTTPException(400, "Hacen falta al menos 2 epocas para el modo diferencia")
         if ref not in usable_epochs:
@@ -375,8 +395,8 @@ def cutout_gif(ra: float = RA, dec: float = DEC, fov: float = FOV, band: str = Q
                                         MAX_PER_FRAME, res)
                 diff_arr = arr - ref_arr
                 meta_copy = dict(meta)
-                meta_copy["date"] = f"{meta['date']} − ref"
-                meta_copy["label_sub"] = f"SPHEREx · {band} · {int(fov)}″"
+                meta_copy["date"] = f"{meta['date']} - ref"
+                meta_copy["label_sub"] = sub
                 frames_data.append((diff_arr, meta_copy))
             except Exception:
                 continue
@@ -386,7 +406,7 @@ def cutout_gif(ra: float = RA, dec: float = DEC, fov: float = FOV, band: str = Q
                 arr, meta = build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, ep), "median",
                                         MAX_PER_FRAME, res)
                 meta_copy = dict(meta)
-                meta_copy["label_sub"] = f"SPHEREx · {band} · {int(fov)}″"
+                meta_copy["label_sub"] = sub
                 frames_data.append((arr, meta_copy))
             except Exception:
                 continue
@@ -394,16 +414,35 @@ def cutout_gif(ra: float = RA, dec: float = DEC, fov: float = FOV, band: str = Q
     if not frames_data:
         raise HTTPException(404, f"No hay imagenes validas en {band} para generar el GIF animado")
 
+    mfrac = None
+    if marker is not None:
+        m0 = frames_data[0][1]
+        mfrac = _sky_frac(ra, dec, marker[0], marker[1], float(m0["size"]) * float(m0["scale"]))
     body = imaging.render_gif(frames_data, stretch=stretch, invert=invert, diff=(mode == "diff"),
-                              duration_ms=speed, watermark=watermark, vmin=vmin, vmax=vmax)
+                              duration_ms=speed, watermark=watermark, vmin=vmin, vmax=vmax,
+                              scale_to=scale_to, cross=cross, marker=mfrac, common=common)
+    return body, len(frames_data)
 
-    filename = f"spherex_ra{ra:.4f}_dec{dec:.4f}_{band}_fov{int(fov)}.gif"
+
+@app.get("/api/v1/cutout/gif")
+def cutout_gif(ra: float = RA, dec: float = DEC, fov: float = FOV, band: str = Query("D4"),
+               mode: str = Query("blink", pattern="^(blink|diff|coadd)$"),
+               stretch: str = Query("asinh"), invert: bool = False,
+               ref: int = Query(0, ge=0), speed: int = Query(500, ge=50, le=2000),
+               res: str = Query("high", pattern="^(low|high)$"),
+               watermark: bool = Query(True),
+               vmin: Optional[float] = None, vmax: Optional[float] = None):
+    """Genera al vuelo una animacion GIF de las epocas de esa posicion (blink o diferencia).
+    Ultra-rapido: recupera los arrays de Redis y compone el GIF en milisegundos."""
+    body, n = make_gif(ra, dec, fov, band, mode, stretch, invert, ref, speed, res, watermark, vmin, vmax)
+    ra, dec = _r(ra, dec)
+    filename = f"spherex_ra{ra:.4f}_dec{dec:.4f}_{band}_fov{int(round(fov))}.gif"
     headers = {
         "Content-Disposition": f'inline; filename="{filename}"',
         "Content-Type": "image/gif",
         "Cache-Control": "public, max-age=43200",
-        "X-Spherex-Frames": str(len(frames_data)),
-        "X-Spherex-Fov": str(int(fov)),
+        "X-Spherex-Frames": str(n),
+        "X-Spherex-Fov": str(int(round(fov))),
         "X-Spherex-Band": band,
     }
     return Response(body, media_type="image/gif", headers=headers)
@@ -471,6 +510,12 @@ def cutout_prewarm(background_tasks: BackgroundTasks, ra: float = RA, dec: float
 @app.get("/api/v1/spectrum")
 def spectrum(ra: float = RA, dec: float = DEC):
     """Fotometria de apertura en todos los exposures -> SED de 102 canales (uJy)."""
+    return Response(make_spectrum(ra, dec), media_type="application/json",
+                    headers={"Cache-Control": "public, max-age=43200"})
+
+
+def make_spectrum(ra: float, dec: float) -> bytes:
+    """Espectro de 102 canales en (ra, dec) como JSON (bytes), con cache en Redis."""
     ra, dec = _r(ra, dec)
     exps = get_exposures(ra, dec)
     if not exps:
@@ -481,7 +526,7 @@ def spectrum(ra: float = RA, dec: float = DEC):
     key = "sed:" + _hash(ra, dec, ",".join(e["obs"] for e in sel))
     raw = cache.get(key)
     if raw:
-        return Response(raw, media_type="application/json", headers={"Cache-Control": "public, max-age=43200"})
+        return raw
 
     size_deg = 24 * upstream.NATIVE_SCALE / 3600.0
 
@@ -517,7 +562,7 @@ def spectrum(ra: float = RA, dec: float = DEC):
         "diagnostics": imaging.diagnostics(points),
     }).encode()
     cache.set(key, body, TTL_ARR)
-    return Response(body, media_type="application/json", headers={"Cache-Control": "public, max-age=43200"})
+    return body
 
 
 _disk = {"t": 0.0, "v": {}}
@@ -601,3 +646,18 @@ def cache_stats():
     return JSONResponse({"version": VERSION, "redis": cache.info(), "disk": _disk_stats(),
                          "source": _source_stats()},
                         headers={"Cache-Control": "no-store"})
+
+
+# --------------------------------------------------------------------------- foro
+def _forum_gif(view: dict, obj: tuple[float, float] | None) -> tuple[bytes, int]:
+    """El GIF de una publicacion: las mismas opciones que tenia el visor del autor,
+    ampliado a 480 px, con la reticula si la tenia y un circulo en el objeto analizado."""
+    mode = view["mode"]
+    return make_gif(view["ra"], view["dec"], view["fov"], view["band"], mode, view["stretch"],
+                    view["invert"], view["ref"], view["speed"], "high", True,
+                    view.get("vmin"), view.get("vmax"), scale_to=480, cross=view.get("cross", True),
+                    marker=obj, common=view.get("common", True))
+
+
+forum.init(_forum_gif, make_spectrum)
+app.include_router(forum.router)

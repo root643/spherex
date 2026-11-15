@@ -15,6 +15,10 @@
     <h1>SPHEREx Blink</h1>
     <span class="sub">Planet X &amp; SPHEREx · NASA Space Apps 2026</span>
   </div>
+  <nav class="nav" aria-label="Secciones">
+    <a href="/" aria-current="page">Visor</a>
+    <a href="/forum.html">Foro</a>
+  </nav>
   <form id="search" class="search" autocomplete="off">
     <input id="q" type="search" placeholder="Nombre u «RA Dec» en grados — p. ej. WISE 0855 o 269.452 4.693" aria-label="Buscar objeto o coordenadas">
     <button type="submit">Ir</button>
@@ -119,6 +123,7 @@
       <button id="share" type="button">Copiar enlace</button>
       <button id="exportGif" type="button" title="Exportar animación GIF de las épocas">Exportar GIF</button>
     </div>
+    <button id="publish" class="publish-btn" type="button" title="Publicar esta vista y el espectro del objeto marcado en el foro">Publicar en el foro</button>
   </aside>
 
   <section class="viewer" aria-label="Visor">
@@ -160,6 +165,7 @@
       <canvas id="chart"></canvas>
     </div>
     <dl id="diag" class="diag"></dl>
+    <button id="pubFromSed" class="publish-btn" type="button" hidden>Publicar este objeto en el foro</button>
     <h2>Épocas</h2>
     <ol id="epochs" class="epochs"></ol>
   </aside>
@@ -169,6 +175,53 @@
   <span id="stats">caché: —</span>
   <span>Datos: NASA/JPL-Caltech · IPAC/IRSA · <a href="/api/docs">API</a></span>
 </footer>
-<script src="app.js?v=13"></script>
+<dialog id="pubDlg" class="pub-dlg" aria-labelledby="pubHead">
+  <form id="pubForm" novalidate>
+    <header class="pub-head">
+      <h2 id="pubHead">Publicar hallazgo en el foro</h2>
+      <button type="button" id="pubClose" class="pub-x" aria-label="Cerrar">×</button>
+    </header>
+    <div class="pub-grid">
+      <div class="pub-preview">
+        <div class="pub-stage"><img id="pubImg" alt="Vista previa de la animación que se publicará"><span id="pubFrame" class="mono"></span></div>
+        <ul id="pubChips" class="pub-chips" aria-label="Opciones que se publican"></ul>
+        <p class="pub-note">Se publica tal cual lo estás viendo. El GIF y el espectro se generan una vez y quedan guardados en el foro.</p>
+      </div>
+      <div class="pub-fields">
+        <label>Título
+          <input id="pubTitle" maxlength="120" autocomplete="off" placeholder="p. ej. Posible objeto con movimiento propio junto a Barnard">
+        </label>
+        <fieldset class="pub-obj">
+          <legend>Objeto que se analiza con las 102 bandas</legend>
+          <label class="pub-opt"><input type="radio" name="pubObj" value="marker">
+            <span><b>El objeto marcado</b><small id="pubMarkerTxt" class="mono"></small></span></label>
+          <label class="pub-opt"><input type="radio" name="pubObj" value="center">
+            <span><b>El centro de la vista</b><small id="pubCenterTxt" class="mono"></small></span></label>
+          <p id="pubObjHint" class="pub-hint">Para analizar otro objeto: cierra, haz clic sobre él en la imagen y vuelve a pulsar Publicar.</p>
+        </fieldset>
+        <label>Objetivo <span class="opt-tag">opcional</span>
+          <input id="pubTarget" maxlength="80" list="pubTargets" autocomplete="off" placeholder="Nombre del objeto o del campo">
+          <datalist id="pubTargets">
+            <option value="Barnard's Star"></option><option value="WISE 0855-0714"></option>
+            <option value="Epsilon Indi B"></option><option value="RW Aurigae"></option><option value="R Draconis"></option>
+          </datalist>
+        </label>
+        <label>Descripción <span class="opt-tag">opcional</span>
+          <textarea id="pubBody" maxlength="4000" rows="4" placeholder="¿Qué has visto? Movimiento entre épocas, un color raro en el espectro…"></textarea>
+        </label>
+        <label>Tu alias <span class="opt-tag">opcional</span>
+          <input id="pubAuthor" maxlength="40" autocomplete="nickname" placeholder="Anónimo">
+        </label>
+        <p id="pubMsg" class="pub-msg" role="status" aria-live="polite"></p>
+        <div class="pub-actions">
+          <button type="button" id="pubCancel">Cancelar</button>
+          <button type="submit" id="pubSend" class="primary">Publicar</button>
+        </div>
+      </div>
+    </div>
+  </form>
+</dialog>
+<script src="chart.js?v=1"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>
