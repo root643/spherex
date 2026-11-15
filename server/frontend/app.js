@@ -232,25 +232,6 @@
   // ------------------------------------------------------------------ controles
   function setMsg(text, err) { const m = $("msg"); m.textContent = text || ""; m.classList.toggle("err", !!err); }
 
-  const SCIENTIFIC_TARGETS = [
-    { name: "Barnard's Star", ra: 269.4521, dec: 4.6934, fov: 240, band: "D2", type: "Mayor movimiento propio conocido (10.39″/año)" },
-    { name: "WISE 0855-0714", ra: 133.7951, dec: -7.2451, fov: 240, band: "D5", type: "Enana marrón más fría del cielo (~250 K)" },
-    { name: "ε Indi B", ra: 331.0440, dec: -56.7830, fov: 300, band: "D3", type: "Binaria de enanas marrones (4.70″/año)" },
-    { name: "Luhman 16", ra: 162.2988, dec: -53.3194, fov: 240, band: "D4", type: "Par de enanas marrones más cercano (6.5 al)" },
-    { name: "TRAPPIST-1", ra: 346.6224, dec: -5.0414, fov: 240, band: "D3", type: "Enana roja con 7 planetas templados" },
-    { name: "Polo Eclíptico Norte (NEP)", ra: 270.0000, dec: 66.5607, fov: 360, band: "D4", type: "Campo profundo continua SPHEREx" },
-    { name: "Polo Eclíptico Sur (SEP)", ra: 90.0000, dec: -66.5607, fov: 360, band: "D4", type: "Campo profundo austral SPHEREx" },
-    { name: "Planeta X · Tauro", ra: 62.5000, dec: 18.2500, fov: 300, band: "D5", type: "Zona de búsqueda de Planeta X / TNOs" },
-    { name: "Planeta X · Cetus", ra: 42.1500, dec: -8.4500, fov: 300, band: "D5", type: "Corredor predicho de afelio de Planeta X" },
-    { name: "Planeta X · Ofiuco", ra: 255.3000, dec: -15.8000, fov: 300, band: "D5", type: "Sondeo infrarrojo de alta inclinación" },
-    { name: "Estrella de Teegarden", ra: 43.2537, dec: 16.8813, fov: 240, band: "D2", type: "Enana M de altísimo PM (5.06″/año)" },
-    { name: "Wolf 359", ra: 164.1203, dec: 7.0147, fov: 240, band: "D2", type: "Enana roja fulgurante vecina (4.7″/año)" },
-    { name: "Ross 128", ra: 176.9350, dec: 0.8045, fov: 240, band: "D2", type: "Enana roja inactiva con exoplaneta" },
-    { name: "CW Leonis (IRC +10216)", ra: 146.9892, dec: 13.2787, fov: 300, band: "D6", type: "Estrella de carbono más brillante en IR medio" },
-    { name: "RW Aurigae", ra: 76.9560, dec: 30.4010, fov: 300, band: "D2", type: "Variable T Tauri con caídas profundas" },
-    { name: "R Draconis", ra: 248.1680, dec: 66.7550, fov: 300, band: "D2", type: "Variable Mira clásica (P ~ 245.6 d)" }
-  ];
-
   function randomCelestialCoord() {
     const ra = +(Math.random() * 359.9999).toFixed(4);
     const u = Math.random() * 2 - 1;
@@ -264,9 +245,7 @@
     try {
       t = await getJson(`${API}/targets/random`);
     } catch {
-      t = (Math.random() < 0.75)
-        ? SCIENTIFIC_TARGETS[Math.floor(Math.random() * SCIENTIFIC_TARGETS.length)]
-        : randomCelestialCoord();
+      t = randomCelestialCoord();
     }
     state.ra = t.ra;
     state.dec = t.dec;
@@ -275,7 +254,7 @@
     marker = null; targetName = t.name || "";
     paintControls();
     syncUrl();
-    setMsg(`🎲 Coordenadas aleatorias: ${t.name} (${t.type || "Interés científico"})`);
+    setMsg(`🎲 Coordenadas aleatorias: RA ${state.ra.toFixed(4)}°, Dec ${state.dec >= 0 ? "+" : ""}${state.dec.toFixed(4)}° (${state.band})`);
     reload();
   }
 

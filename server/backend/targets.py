@@ -26,42 +26,6 @@ BENCHMARK = [
      "aliases": ["r dra", "r draconis"]},
 ]
 
-# Objetivos ampliados de alto interes cientifico y cobertura validada SPHEREx
-INTEREST_TARGETS = [
-    {"name": "Barnard's Star", "ra": 269.4521, "dec": 4.6934, "fov": 240, "band": "D2",
-     "type": "Estrella con mayor movimiento propio conocido (10.39\"/yr)", "category": "proper_motion"},
-    {"name": "WISE 0855-0714", "ra": 133.7951, "dec": -7.2451, "fov": 240, "band": "D5",
-     "type": "Enana marrón más fría del cielo (~250 K, 8.1\"/yr)", "category": "brown_dwarf"},
-    {"name": "Epsilon Indi B", "ra": 331.0440, "dec": -56.7830, "fov": 300, "band": "D3",
-     "type": "Binaria de enanas marrones frías (4.70\"/yr)", "category": "brown_dwarf"},
-    {"name": "Luhman 16", "ra": 162.2988, "dec": -53.3194, "fov": 240, "band": "D4",
-     "type": "Par de enanas marrones más cercano a la Tierra (6.5 al)", "category": "brown_dwarf"},
-    {"name": "TRAPPIST-1", "ra": 346.6224, "dec": -5.0414, "fov": 240, "band": "D3",
-     "type": "Enana roja ultrafria con 7 planetas templados", "category": "exoplanets"},
-    {"name": "Polo Eclíptico Norte (NEP)", "ra": 270.0000, "dec": 66.5607, "fov": 360, "band": "D4",
-     "type": "Campo profundo de máxima cobertura continua SPHEREx", "category": "deep_field"},
-    {"name": "Polo Eclíptico Sur (SEP)", "ra": 90.0000, "dec": -66.5607, "fov": 360, "band": "D4",
-     "type": "Campo profundo austral de SPHEREx (máxima profundidad)", "category": "deep_field"},
-    {"name": "Zona Planeta X · Tauro", "ra": 62.5000, "dec": 18.2500, "fov": 300, "band": "D5",
-     "type": "Corredor de búsqueda de Planeta X / TNOs en plano eclíptico", "category": "planet_x"},
-    {"name": "Zona Planeta X · Cetus", "ra": 42.1500, "dec": -8.4500, "fov": 300, "band": "D5",
-     "type": "Corredor predicho de afelio para el Planeta Nueve", "category": "planet_x"},
-    {"name": "Zona Planeta X · Ofiuco", "ra": 255.3000, "dec": -15.8000, "fov": 300, "band": "D5",
-     "type": "Sondeo infrarrojo de alta inclinación orbital", "category": "planet_x"},
-    {"name": "Estrella de Teegarden", "ra": 43.2537, "dec": 16.8813, "fov": 240, "band": "D2",
-     "type": "Enana M de altísimo movimiento propio (5.06\"/yr)", "category": "proper_motion"},
-    {"name": "Wolf 359", "ra": 164.1203, "dec": 7.0147, "fov": 240, "band": "D2",
-     "type": "Enana roja fulgurante vecina (4.7\"/yr)", "category": "proper_motion"},
-    {"name": "Ross 128", "ra": 176.9350, "dec": 0.8045, "fov": 240, "band": "D2",
-     "type": "Enana roja inactiva con exoplaneta de masa terrestre", "category": "exoplanets"},
-    {"name": "CW Leonis (IRC +10216)", "ra": 146.9892, "dec": 13.2787, "fov": 300, "band": "D6",
-     "type": "Estrella de carbono más brillante en el infrarrojo medio", "category": "infrared_bright"},
-    {"name": "RW Aurigae", "ra": 76.9560, "dec": 30.4010, "fov": 300, "band": "D2",
-     "type": "Variable T Tauri con caídas profundas de brillo", "category": "variable"},
-    {"name": "R Draconis", "ra": 248.1680, "dec": 66.7550, "fov": 300, "band": "D2",
-     "type": "Variable Mira clásica (período ~245.6 d)", "category": "variable"},
-]
-
 _COORD = re.compile(r"^\s*([+-]?\d+(?:\.\d+)?)\s*[, ]\s*([+-]?\d+(?:\.\d+)?)\s*$")
 _SESAME = "https://cds.unistra.fr/cgi-bin/nph-sesame/-oI/SNV?{}"
 
@@ -85,18 +49,7 @@ def random_celestial() -> dict:
 
 
 def random_target(mode: str = "auto") -> dict:
-    """Devuelve un objetivo de interes cientifico o coordenadas celestes aleatorias."""
-    if mode == "celestial":
-        return random_celestial()
-    if mode == "candidate":
-        target = dict(random.choice(INTEREST_TARGETS))
-        target["source"] = "scientific_interest"
-        return target
-    # modo auto: 75% objetivos cientificos / candidatos / polos SPHEREx, 25% punto celeste puro
-    if random.random() < 0.75:
-        target = dict(random.choice(INTEREST_TARGETS))
-        target["source"] = "scientific_interest"
-        return target
+    """Genera coordenadas celestes aleatorias sin objetivos predefinidos."""
     return random_celestial()
 
 

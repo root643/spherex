@@ -3,8 +3,10 @@ Ejecutar:  python3 tests/test_forum.py
 """
 import json, os, sys, tempfile, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "server", "backend"))
-os.environ["SPHEREX_FORUM_DIR"] = tempfile.mkdtemp(prefix="forum-")
+_tmp_test_dir = tempfile.mkdtemp(prefix="forum-")
+os.environ["SPHEREX_FORUM_DIR"] = _tmp_test_dir
 import forum_store as fs
+fs.FORUM_DIR = _tmp_test_dir
 
 VIEW = {"ra": 269.4521, "dec": 4.6934, "fov": 240, "band": "D2", "mode": "blink", "stretch": "asinh",
         "invert": False, "speed": 500, "ref": 0, "common": True, "cross": True, "vmin": 1.0, "vmax": 9.0}

@@ -36,19 +36,16 @@ class TestRandomCoordinates(unittest.TestCase):
         self.assertAlmostEqual(mean_sin, 0.0, delta=0.08)
 
     def test_random_target_modes(self):
-        """Comprueba los modos de seleccion de objetivos aleatorios."""
-        cand = targets.random_target("candidate")
-        self.assertIn("name", cand)
-        self.assertEqual(cand["source"], "scientific_interest")
-        self.assertIn(cand["category"], ["proper_motion", "brown_dwarf", "planet_x", "deep_field", "exoplanets", "infrared_bright", "variable"])
-
-        cel = targets.random_target("celestial")
-        self.assertEqual(cel["category"], "uniform_celestial")
-        self.assertEqual(cel["source"], "random")
-
-        auto = targets.random_target("auto")
-        self.assertIn("ra", auto)
-        self.assertIn("dec", auto)
+        """Comprueba que la seleccion de objetivos devuelva coordenadas celestes aleatorias validas."""
+        t = targets.random_target()
+        self.assertIn("ra", t)
+        self.assertIn("dec", t)
+        self.assertGreaterEqual(t["ra"], 0.0)
+        self.assertLess(t["ra"], 360.0)
+        self.assertGreaterEqual(t["dec"], -90.0)
+        self.assertLessEqual(t["dec"], 90.0)
+        self.assertEqual(t["category"], "uniform_celestial")
+        self.assertEqual(t["source"], "random")
 
 
 class TestCatalogsParsing(unittest.TestCase):
