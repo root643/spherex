@@ -34,7 +34,13 @@ TTL_ARR = 14 * 86400
 app = FastAPI(title="SPHEREx WiseView Translation Server", version=VERSION,
               docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
 cache = Cache()
-pool = ThreadPoolExecutor(max_workers=int(os.environ.get("SPHEREX_FETCH_THREADS", "16")))
+# Pool dedicado exclusivamente a peticiones prioritarias del usuario (foreground)
+pool = ThreadPoolExecutor(max_workers=int(os.environ.get("SPHEREX_FETCH_THREADS", "16")),
+                          thread_name_prefix="fg_worker")
+# Pool aislado de baja concurrencia para precalentamiento especulativo en segundo plano.
+# 1 solo hilo para no competir nunca con el visor ni saturar los 4 nucleos del servidor.
+prewarm_pool = ThreadPoolExecutor(max_workers=int(os.environ.get("SPHEREX_PREWARM_THREADS", "1")),
+                                  thread_name_prefix="prewarm_worker")
 
 RA = Query(..., ge=0, lt=360, description="Ascension recta J2000 (grados)")
 DEC = Query(..., ge=-90, le=90, description="Declinacion J2000 (grados)")
@@ -105,7 +111,8 @@ def summarize_epochs(exps: list[dict]) -> list[dict]:
 
 # --------------------------------------------------------------------------- construccion de matrices
 def build_array(ra: float, dec: float, fov: float, det: int, lmin: float | None, lmax: float | None,
-                exps: list[dict], method: str, cap: int, res: str = "high") -> tuple[np.ndarray, dict]:
+                exps: list[dict], method: str, cap: int, res: str = "high",
+                executor: ThreadPoolExecutor | None = None) -> tuple[np.ndarray, dict]:
     """Descarga, limpia, reproyecta y apila los exposures dados. Cache en Redis."""
     exps = [e for e in exps if e["detector"] == det]
     exps = imaging.sample_evenly(exps, cap if lmin is None else max(cap, 40))
@@ -132,8 +139,9 @@ def build_array(ra: float, dec: float, fov: float, det: int, lmin: float | None,
         arr = upstream.reproject_to(exp, tw, n)
         return (arr, wl, e["mjd"]) if np.isfinite(arr).any() else None
 
+    active_pool = executor if executor is not None else pool
     frames, wls, mjds, errors = [], [], [], []
-    for fut in [pool.submit(one, e) for e in exps]:
+    for fut in [active_pool.submit(one, e) for e in exps]:
         try:
             r = fut.result()
         except Exception as ex:  # un exposure roto no tumba el fotograma
@@ -272,20 +280,22 @@ def cutout_coadd(ra: float = RA, dec: float = DEC, fov: float = FOV, band: str =
 # --------------------------------------------------------------------------- prewarm
 _prewarming: set[tuple] = set()
 _prewarm_lock = threading.Lock()
+MAX_PREWARM_PENDING = 4
 
 
 def _prewarm_epoch(ra: float, dec: float, fov: float, det: int, lmin: float | None,
                    lmax: float | None, epoch: int, token: tuple) -> None:
-    """Construye en segundo plano el array de una epoca (guarda baja y alta resolucion en Redis)."""
+    """Construye en segundo plano el array de una epoca usando prewarm_pool (1 hilo).
+    Precalienta baja y alta resolucion en Redis sin competir con peticiones interactivas."""
     try:
         exps = get_exposures(ra, dec)
         ep_exps = _epoch_exps(exps, epoch)
-        # 1. Baja resolucion para respuesta instantanea al cambiar de banda
-        build_array(ra, dec, fov, det, lmin, lmax, ep_exps, "median", MAX_PER_FRAME, "low")
+        # 1. Baja resolucion para respuesta rapida si el usuario cambia de banda
+        build_array(ra, dec, fov, det, lmin, lmax, ep_exps, "median", MAX_PER_FRAME, "low", executor=prewarm_pool)
         # 2. Alta resolucion para nitidez completa
-        build_array(ra, dec, fov, det, lmin, lmax, ep_exps, "median", MAX_PER_FRAME, "high")
+        build_array(ra, dec, fov, det, lmin, lmax, ep_exps, "median", MAX_PER_FRAME, "high", executor=prewarm_pool)
     except Exception:
-        pass  # el prewarm es oportunista: los errores los contaran las peticiones normales
+        pass  # el prewarm es oportunista
     finally:
         with _prewarm_lock:
             _prewarming.discard(token)
@@ -294,11 +304,15 @@ def _prewarm_epoch(ra: float, dec: float, fov: float, det: int, lmin: float | No
 @app.get("/api/v1/cutout/prewarm")
 def cutout_prewarm(background_tasks: BackgroundTasks, ra: float = RA, dec: float = DEC,
                    fov: float = FOV, band: str = Query("D4")):
-    """Encola la construccion de todas las epocas de esa banda (o de todas con band='all')
-    sin esperar a que acaben. Precalienta baja y alta resolucion en Redis.
-    """
+    """Encola la construccion de epocas en segundo plano de forma dosificada y no invasiva."""
     ra, dec = _r(ra, dec)
     fov = float(round(fov))
+
+    with _prewarm_lock:
+        if len(_prewarming) >= MAX_PREWARM_PENDING:
+            return JSONResponse({"status": "busy", "message": "Cola de prewarm saturada"},
+                                headers={"Cache-Control": "no-store"})
+
     exps = get_exposures(ra, dec)
     enqueued = 0
 
@@ -313,7 +327,7 @@ def cutout_prewarm(background_tasks: BackgroundTasks, ra: float = RA, dec: float
         for epoch in sorted({e["epoch"] for e in det_exps}):
             token = (ra, dec, fov, det, epoch)
             with _prewarm_lock:
-                if token in _prewarming:
+                if token in _prewarming or len(_prewarming) >= MAX_PREWARM_PENDING:
                     continue
                 _prewarming.add(token)
             background_tasks.add_task(_prewarm_epoch, ra, dec, fov, det, lmin, lmax, epoch, token)

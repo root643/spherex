@@ -212,6 +212,7 @@
 
   // ------------------------------------------------------------------ carga principal
   async function reload() {
+    cancelPrefetch();
     paintControls(); syncUrl();
     if (state.ra == null) return;
     const token = ++loadToken;
@@ -223,10 +224,6 @@
       const obs = await getJson(`${API}/observations?ra=${state.ra}&dec=${state.dec}`);
       if (token !== loadToken) return;
       epochs = obs.epochs;
-      // encolar la construccion de todas las epocas en el servidor: las peticiones
-      // de fotogramas que vengan despues caeran en Redis en vez de reproyectar en frio
-      fetch(`${API}/cutout/prewarm?ra=${state.ra}&dec=${state.dec}&fov=${state.fov}&band=${"D" + detOf(state.band)}`)
-        .catch(() => {});
       const det = "D" + detOf(state.band);
       [...$("bands").children].forEach((b) => (b.disabled = !(obs.detectors["D" + b.dataset.det] > 0)));
       const usable = epochs.filter((e) => e.detectors[det] > 0);
@@ -286,8 +283,8 @@
         if (frames[idx] && frames[idx].idx0 === i) show(idx);
       };
 
-      // fase 1: baja resolucion
-      await mapLimit(jobs, 6, async (j, i) => {
+      // fase 1: baja resolucion (carga rapida para respuesta inmediata)
+      await mapLimit(jobs, 4, async (j, i) => {
         try {
           applyFrame(i, await fetchFrame(frameUrl(j.kind, { ...j.extra, res: "low" })));
         } catch (e) { applyFrame(i, { error: e }); }
@@ -303,37 +300,63 @@
         lim = { vmin: Math.min(...validJobs.map((x) => x.f.meta.vmin)), vmax: Math.max(...validJobs.map((x) => x.f.meta.vmax)) };
       }
 
-      // fase 2 (sin esperar): alta resolucion, cada fotograma sustituye a su version baja
-      mapLimit(validJobs, 4, async (x) => {
+      // fase 2: alta resolucion con concurrencia controlada (2 hilos) para no saturar CPU
+      mapLimit(validJobs, 2, async (x) => {
         if (token !== loadToken) return;
         try {
           replaceFrame(x.idx0, await fetchFrame(frameUrl(x.job.kind, { ...x.job.extra, ...lim })));
         } catch { /* se conserva la baja resolucion */ }
+      }).then(() => {
+        // Solo tras completar la alta resolucion y si el usuario sigue en la misma vista,
+        // se programa el precalentamiento especulativo dosificado
+        if (token === loadToken) {
+          schedulePrefetch(state.ra, state.dec, state.fov, det);
+        }
       });
-
-      // precalentamiento especulativo: todas las demas bandas y niveles de zoom contiguos
-      schedulePrefetch(state.ra, state.dec, state.fov, det);
     } catch (e) {
       if (token === loadToken) setMsg(e.message, true);
     }
   }
 
   let prefetchTimer = null;
+  let prefetchAbort = null;
+
+  function cancelPrefetch() {
+    if (prefetchTimer) {
+      clearTimeout(prefetchTimer);
+      prefetchTimer = null;
+    }
+    if (prefetchAbort) {
+      prefetchAbort.abort();
+      prefetchAbort = null;
+    }
+  }
+
   function schedulePrefetch(ra, dec, fov, currentDet) {
-    clearTimeout(prefetchTimer);
-    prefetchTimer = setTimeout(() => {
-      // 1. Todas las demas bandas en segundo plano en Redis
-      fetch(`${API}/cutout/prewarm?ra=${ra}&dec=${dec}&fov=${fov}&band=all`).catch(() => {});
-      // 2. Niveles de zoom adyacentes (un paso adentro y un paso afuera)
-      const fovIn = Math.max(60, fov - (fov <= 120 ? 30 : 60));
-      const fovOut = Math.min(1800, fov + (fov >= 1200 ? 120 : 60));
-      if (fovIn !== fov) {
-        fetch(`${API}/cutout/prewarm?ra=${ra}&dec=${dec}&fov=${fovIn}&band=${currentDet}`).catch(() => {});
+    cancelPrefetch();
+    prefetchTimer = setTimeout(async () => {
+      if (state.ra !== ra || state.dec !== dec || state.fov !== fov) return;
+      prefetchAbort = new AbortController();
+      const signal = prefetchAbort.signal;
+
+      try {
+        // 1. Precalentar siguiente nivel de zoom hacia adentro (el paso mas habitual)
+        const fovIn = Math.max(60, fov - (fov <= 120 ? 30 : 60));
+        if (fovIn !== fov && !signal.aborted) {
+          await fetch(`${API}/cutout/prewarm?ra=${ra}&dec=${dec}&fov=${fovIn}&band=${currentDet}`, { signal });
+        }
+        if (signal.aborted) return;
+
+        // 2. Precalentar banda contigua mas cercana (ej: D1 -> D2; D2 -> D3; D6 -> D5)
+        const detNum = parseInt(currentDet.replace(/\D/g, ""), 10) || 1;
+        const nextDet = detNum < 6 ? `D${detNum + 1}` : `D${detNum - 1}`;
+        if (!signal.aborted) {
+          await fetch(`${API}/cutout/prewarm?ra=${ra}&dec=${dec}&fov=${fov}&band=${nextDet}`, { signal });
+        }
+      } catch {
+        // Cancelacion intencionada o fallo silencioso
       }
-      if (fovOut !== fov) {
-        fetch(`${API}/cutout/prewarm?ra=${ra}&dec=${dec}&fov=${fovOut}&band=${currentDet}`).catch(() => {});
-      }
-    }, 450);
+    }, 2500);
   }
 
   function paintEpochs(det) {
