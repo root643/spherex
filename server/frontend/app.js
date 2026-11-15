@@ -977,8 +977,14 @@
     if (!r.ok) throw new Error(await errText(r));
     const h = (k) => r.headers.get("X-Spherex-" + k);
     const blob = await r.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    try {
+      const img = new Image();
+      img.src = blobUrl;
+      if (img.decode) await img.decode();
+    } catch { /* decodificacion diferida */ }
     return {
-      url: URL.createObjectURL(blob),
+      url: blobUrl,
       meta: { vmin: +h("Vmin"), vmax: +h("Vmax"), n: +h("N"), date: h("Date"), size: +h("Size"), scale: +h("Scale"), wl: h("Wavelength") },
     };
   }
@@ -992,26 +998,38 @@
   }
 
   // ------------------------------------------------------------------ carga principal
+  let lastLoadedCenter = { ra: null, dec: null };
   async function reload(opts = {}) {
-    const isZoomOnly = Boolean(opts && opts.zoomOnly && frames.length);
-    const isRecenterOnly = Boolean(opts && opts.recenterOnly && frames.length);
-    const keepExisting = isZoomOnly || isRecenterOnly;
+    const hasExisting = frames.length > 0;
+    const isZoomOnly = Boolean(opts && opts.zoomOnly && hasExisting);
+    const isRecenterOnly = Boolean(opts && opts.recenterOnly && hasExisting);
+    const keepExisting = hasExisting;
     cancelPrefetch();
     paintControls(); syncUrl();
     if (state.ra == null) return;
     const token = ++loadToken;
     if (state.gaia || state.wise) loadCatalogs();
 
+    const isSameCenter = lastLoadedCenter.ra != null &&
+      Math.abs(lastLoadedCenter.ra - state.ra) < 1e-4 &&
+      Math.abs(lastLoadedCenter.dec - state.dec) < 1e-4;
+
     if (!keepExisting) {
       panOffset = { x: 0, y: 0 };
       baseFov = state.fov;
       applyVisualTransform();
       pause(true);
-      frames.forEach((f) => URL.revokeObjectURL(f.url));
+      frames.forEach((f) => { if (f && f.url) URL.revokeObjectURL(f.url); });
       frames = []; $("img").removeAttribute("src"); $("frameLabel").textContent = ""; $("frameMeta").textContent = "";
       if (viewerLoader) viewerLoader.start("Consultando archivo SPHEREx…");
     } else {
-      if (viewerLoader) viewerLoader.start(isRecenterOnly ? "Centrando en nuevas coordenadas…" : "Ajustando nitidez astrométrica…");
+      let msg = "Consultando archivo SPHEREx…";
+      if (isRecenterOnly) msg = "Centrando en nuevas coordenadas…";
+      else if (isZoomOnly) msg = "Ajustando nitidez astrométrica…";
+      else if (state.mode === "diff") msg = "Calculando diferencias de época…";
+      else if (state.mode === "coadd") msg = "Generando coadición profunda…";
+      else if (state.band) msg = `Cargando banda ${state.band}…`;
+      if (viewerLoader) viewerLoader.start(msg);
     }
 
     try {
@@ -1025,7 +1043,10 @@
       const det = "D" + detOf(state.band);
       const usable = epochs.filter((e) => e.detectors[det] > 0);
       paintEpochs(det);
-      if (!usable.length) return setMsg(`Sin imágenes en ${det} para esta posición. Prueba otro detector.`, true);
+      if (!usable.length) {
+        if (viewerLoader) viewerLoader.fail(`Sin imágenes en ${det} para esta posición.`);
+        return setMsg(`Sin imágenes en ${det} para esta posición. Prueba otro detector.`, true);
+      }
 
       let jobs;
       if (state.mode === "coadd") {
@@ -1058,7 +1079,7 @@
         $("scrub").max = frames.length - 1;
       };
       const applyFrame = (i, f) => {
-        if (token !== loadToken) { if (f.url) URL.revokeObjectURL(f.url); return; }
+        if (token !== loadToken) { if (f && f.url) URL.revokeObjectURL(f.url); return; }
         if (f.error) failed++; else byIdx.set(i, f);
         done++;
         rebuild();
@@ -1072,12 +1093,14 @@
         }
       };
       const replaceFrame = (i, g) => {
-        if (token !== loadToken) { if (g.url) URL.revokeObjectURL(g.url); return; }
+        if (token !== loadToken) { if (g && g.url) URL.revokeObjectURL(g.url); return; }
         const old = byIdx.get(i);
         byIdx.set(i, g);
         rebuild();
-        if (old) URL.revokeObjectURL(old.url);
         if (frames[idx] && frames[idx].idx0 === i) show(idx);
+        if (old && old.url) {
+          setTimeout(() => URL.revokeObjectURL(old.url), 120);
+        }
       };
 
       // fase 1: baja resolucion (carga rapida para respuesta inmediata)
@@ -1087,6 +1110,9 @@
         try {
           const f = await fetchFrame(frameUrl(j.kind, { ...j.extra, res: "low" }));
           newByIdx.set(i, f);
+          if (viewerLoader && keepExisting) {
+            viewerLoader.step(20 + Math.round((newByIdx.size / jobs.length) * 60));
+          }
           if (!keepExisting) {
             applyFrame(i, f);
           }
@@ -1094,21 +1120,40 @@
           if (!keepExisting) applyFrame(i, { error: e }); else newFailed++;
         }
       });
-      if (token !== loadToken) return;
+      if (token !== loadToken) {
+        newByIdx.forEach((f) => { if (f && f.url) URL.revokeObjectURL(f.url); });
+        return;
+      }
 
       if (keepExisting) {
+        if (!newByIdx.size) {
+          if (viewerLoader) viewerLoader.fail("Sin datos válidos para esta selección.");
+          return;
+        }
         const oldFrames = frames;
         byIdx.clear();
         newByIdx.forEach((v, k) => byIdx.set(k, v));
         failed = newFailed;
         rebuild();
-        panOffset = { x: 0, y: 0 };
-        baseFov = state.fov;
-        applyVisualTransform();
-        if (frames.length) show(Math.min(idx, frames.length - 1));
-        oldFrames.forEach((f) => { if (f.url) URL.revokeObjectURL(f.url); });
-        if (viewerLoader) viewerLoader.done("");
+        if (!isZoomOnly && !isSameCenter) {
+          panOffset = { x: 0, y: 0 };
+          baseFov = state.fov;
+          applyVisualTransform();
+        } else if (!isZoomOnly && isSameCenter) {
+          baseFov = state.fov;
+          applyVisualTransform();
+        }
+        if (frames.length) {
+          show(Math.min(idx, frames.length - 1));
+          if (frames.length > 1 && playing) play(); else pause(true);
+        }
+        lastLoadedCenter = { ra: state.ra, dec: state.dec };
+        setTimeout(() => {
+          oldFrames.forEach((f) => { if (f && f.url) URL.revokeObjectURL(f.url); });
+        }, 150);
+        if (viewerLoader) viewerLoader.step(82, "Fotogramas listos · Maximizando resolución…");
       } else {
+        lastLoadedCenter = { ra: state.ra, dec: state.dec };
         if (viewerLoader) viewerLoader.step(82, "Fotogramas listos · Maximizando resolución…");
       }
 
@@ -1134,7 +1179,7 @@
         // Solo tras completar la alta resolucion y si el usuario sigue en la misma vista,
         // se programa el precalentamiento especulativo dosificado
         if (token === loadToken) {
-          if (!keepExisting && viewerLoader) {
+          if (viewerLoader) {
             viewerLoader.done(failed ? `${failed} época(s) sin datos válidos.` : "");
           }
           schedulePrefetch(state.ra, state.dec, state.fov, det);
