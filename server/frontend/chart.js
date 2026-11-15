@@ -6,8 +6,9 @@
   const DET_COLOR = ["#7aa2f7", "#7fd1b9", "#c3e88d", "#ffb454", "#ff8a65", "#f07178"];
 
   function draw(c, s) {
+    if (!c || !s) return;
     const g = c.getContext("2d"), dpr = window.devicePixelRatio || 1;
-    const W = Math.max(280, c.clientWidth), H = Math.round(W * 0.7);
+    const W = Math.max(180, c.clientWidth || 240), H = Math.round(W * 0.7);
     c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const L = 50, R = 10, T = 14, B = 34, x0 = 0.75, x1 = 5.0;
     g.clearRect(0, 0, W, H);

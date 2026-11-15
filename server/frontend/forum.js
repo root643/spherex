@@ -15,8 +15,17 @@
   };
   let voter = store.get("spherex.voter", null);
   if (!voter || !/^[A-Za-z0-9_-]{8,64}$/.test(voter)) {
-    const rnd = crypto.getRandomValues(new Uint8Array(18));
-    voter = btoa(String.fromCharCode(...rnd)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    try {
+      const cryptoObj = (typeof window !== "undefined" && (window.crypto || window.msCrypto));
+      if (cryptoObj && cryptoObj.getRandomValues) {
+        const rnd = cryptoObj.getRandomValues(new Uint8Array(18));
+        voter = btoa(String.fromCharCode.apply(null, Array.from(rnd))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      } else {
+        throw new Error();
+      }
+    } catch {
+      voter = "v_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    }
     store.set("spherex.voter", voter);
   }
   const owned = () => store.get("spherex.owned", {});
@@ -61,13 +70,17 @@
   // ------------------------------------------------------------------ graficas (perezosas)
   const specCache = new Map();
   const drawn = new WeakMap();
-  const io = new IntersectionObserver((entries) => {
-    entries.forEach((en) => { if (en.isIntersecting) { io.unobserve(en.target); loadSpectrum(en.target); } });
-  }, { rootMargin: "300px" });
-  const ro = new ResizeObserver((entries) => entries.forEach((en) => {
-    const s = drawn.get(en.target);
-    if (s) window.SpherexChart.draw(en.target, s);
-  }));
+  const io = (typeof IntersectionObserver !== "undefined")
+    ? new IntersectionObserver((entries) => {
+        entries.forEach((en) => { if (en.isIntersecting) { io.unobserve(en.target); loadSpectrum(en.target); } });
+      }, { rootMargin: "300px" })
+    : { observe(el) { loadSpectrum(el); }, unobserve() {} };
+  const ro = (typeof ResizeObserver !== "undefined")
+    ? new ResizeObserver((entries) => entries.forEach((en) => {
+        const s = drawn.get(en.target);
+        if (s && window.SpherexChart) window.SpherexChart.draw(en.target, s);
+      }))
+    : { observe() {}, unobserve() {} };
   async function loadSpectrum(canvas) {
     const url = canvas.dataset.src;
     const cap = canvas.parentElement.querySelector("figcaption");
