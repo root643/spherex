@@ -49,11 +49,15 @@ def _parse_poly(text: str) -> tuple[float, float, float, float, str] | None:
     if len(vals) < 6 or len(vals) % 2:
         return None
     xs, ys = vals[0::2], vals[1::2]
-    if not all(-1 <= y <= 91 for y in ys) or not all(-1 <= x <= 361 for x in xs):
+    if not all(-91 <= y <= 91 for y in ys) or not all(-361 <= x <= 361 for x in xs):
         return None
-    xs = [(x - 360 if x > 180 else x) for x in xs]   # espacio RA normalizado
-    pairs = " ".join(f"{x:.5f} {y:.5f}" for x, y in zip(xs, ys))
-    return min(xs), max(xs), min(ys), max(ys), pairs
+    raw_xs = [(x + 360.0 if x < 0.0 else x) for x in xs]
+    raw_span = max(raw_xs) - min(raw_xs)
+    norm_xs = [(x - 360.0 if x > 180.0 else x) for x in raw_xs]
+    norm_span = max(norm_xs) - min(norm_xs)
+    final_xs = norm_xs if norm_span <= raw_span else raw_xs
+    pairs = " ".join(f"{x:.5f} {y:.5f}" for x, y in zip(final_xs, ys))
+    return min(final_xs), max(final_xs), min(ys), max(ys), pairs
 
 
 def _pip(poly: list[float], ra: float, dec: float) -> bool:

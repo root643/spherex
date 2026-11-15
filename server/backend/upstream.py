@@ -59,15 +59,19 @@ def _release_rank(uri: str) -> tuple[int, int]:
 def list_exposures(ra: float, dec: float) -> list[dict]:
     """Todas las imagenes espectrales de SPHEREx que contienen la posicion.
 
-    Primero via IRSA TAP; si falla y ya hay volcado local del catalogo (tapdump.py),
-    via SQLite local. Devuelve [{uri, mjd, detector, obs}] ordenado por tiempo.
+    Si el catalogo local esta listo, se usa SQLite local directamente (<0.01s).
+    Si no, se intenta IRSA TAP y se cae a SQLite.
     """
+    if _catalog_ready():
+        report("catalog_local")
+        return list_exposures_local(ra, dec)
     try:
         return _list_exposures_tap(ra, dec)
     except Exception as e:
-        if _catalog_ready():
+        local = list_exposures_local(ra, dec)
+        if local:
             report("tap_local", str(e)[:300])
-            return list_exposures_local(ra, dec)
+            return local
         raise
 
 
@@ -147,8 +151,9 @@ def list_exposures_local(ra: float, dec: float) -> list[dict]:
         cand = con.execute(
             "SELECT c.uri, c.mjd, c.band, c.poly FROM rtree_idx r "
             "JOIN catalog c ON c.rowid = r.id "
-            "WHERE r.ra_min <= ? AND r.ra_max >= ? AND r.dec_min <= ? AND r.dec_max >= ?",
-            (ra_n, ra_n, dec, dec)).fetchall()
+            "WHERE ((r.ra_min <= ? AND r.ra_max >= ?) OR (r.ra_min <= ? AND r.ra_max >= ?)) "
+            "AND r.dec_min <= ? AND r.dec_max >= ?",
+            (ra_n, ra_n, ra, ra, dec, dec)).fetchall()
     finally:
         con.close()
     best: dict[str, dict] = {}
@@ -158,8 +163,9 @@ def list_exposures_local(ra: float, dec: float) -> list[dict]:
             continue
         if poly:
             verts = [float(v) for v in poly.split()]
-            if len(verts) >= 6 and len(verts) % 2 == 0 and not _point_in_poly(verts, ra_n, dec):
-                continue
+            if len(verts) >= 6 and len(verts) % 2 == 0:
+                if not (_point_in_poly(verts, ra_n, dec) or _point_in_poly(verts, ra, dec)):
+                    continue
         try:
             mjd = float(mjd)
         except (TypeError, ValueError):

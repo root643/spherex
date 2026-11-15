@@ -276,10 +276,14 @@ _prewarm_lock = threading.Lock()
 
 def _prewarm_epoch(ra: float, dec: float, fov: float, det: int, lmin: float | None,
                    lmax: float | None, epoch: int, token: tuple) -> None:
-    """Construye en segundo plano el array de una epoca (queda en Redis)."""
+    """Construye en segundo plano el array de una epoca (guarda baja y alta resolucion en Redis)."""
     try:
         exps = get_exposures(ra, dec)
-        build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, epoch), "median", MAX_PER_FRAME)
+        ep_exps = _epoch_exps(exps, epoch)
+        # 1. Baja resolucion para respuesta instantanea al cambiar de banda
+        build_array(ra, dec, fov, det, lmin, lmax, ep_exps, "median", MAX_PER_FRAME, "low")
+        # 2. Alta resolucion para nitidez completa
+        build_array(ra, dec, fov, det, lmin, lmax, ep_exps, "median", MAX_PER_FRAME, "high")
     except Exception:
         pass  # el prewarm es oportunista: los errores los contaran las peticiones normales
     finally:
@@ -290,25 +294,30 @@ def _prewarm_epoch(ra: float, dec: float, fov: float, det: int, lmin: float | No
 @app.get("/api/v1/cutout/prewarm")
 def cutout_prewarm(background_tasks: BackgroundTasks, ra: float = RA, dec: float = DEC,
                    fov: float = FOV, band: str = Query("D4")):
-    """Encola la construccion de todas las epocas de esa banda sin esperar a que acaben.
-
-    El cliente lo llama justo despues de /observations: mientras mira los primeros
-    fotogramas el resto de epocas se van construyendo y las peticiones posteriores
-    caen en Redis.
+    """Encola la construccion de todas las epocas de esa banda (o de todas con band='all')
+    sin esperar a que acaben. Precalienta baja y alta resolucion en Redis.
     """
     ra, dec = _r(ra, dec)
     fov = float(round(fov))
-    det, lmin, lmax = _band(band)
     exps = get_exposures(ra, dec)
     enqueued = 0
-    for epoch in sorted({e["epoch"] for e in exps}):
-        token = (ra, dec, fov, det, epoch)
-        with _prewarm_lock:
-            if token in _prewarming:
-                continue
-            _prewarming.add(token)
-        background_tasks.add_task(_prewarm_epoch, ra, dec, fov, det, lmin, lmax, epoch, token)
-        enqueued += 1
+
+    if band.lower() == "all":
+        targets = [(d, None, None) for d in sorted({e["detector"] for e in exps})]
+    else:
+        det, lmin, lmax = _band(band)
+        targets = [(det, lmin, lmax)]
+
+    for det, lmin, lmax in targets:
+        det_exps = [e for e in exps if e["detector"] == det]
+        for epoch in sorted({e["epoch"] for e in det_exps}):
+            token = (ra, dec, fov, det, epoch)
+            with _prewarm_lock:
+                if token in _prewarming:
+                    continue
+                _prewarming.add(token)
+            background_tasks.add_task(_prewarm_epoch, ra, dec, fov, det, lmin, lmax, epoch, token)
+            enqueued += 1
     return JSONResponse({"status": "ok", "band": band, "epochs": enqueued},
                         headers={"Cache-Control": "no-store"})
 

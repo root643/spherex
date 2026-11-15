@@ -1,0 +1,20 @@
+[Unit]
+Description=NASA SPHEREx WiseView Translation Server
+After=network-online.target redis-server.service
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/opt/spherex-backend
+Environment=SPHEREX_FITS_DIR=/var/cache/spherex/fits
+Environment=SPHEREX_REDIS_URL=redis://127.0.0.1:6379/0
+Environment=SPHEREX_AWS_CUTOUT=http://127.0.0.1:9600/cutout?token=c480514b2b7586660ba94229243253c7
+Environment=SPHEREX_FETCH_THREADS=32
+Environment=SPHEREX_MAX_SPEC_PER_DET=16
+ExecStart=/opt/spherex-env/bin/uvicorn main:app --workers 4 --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

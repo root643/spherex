@@ -158,6 +158,20 @@
       if (!s) return;
       state.ra = +s.ra.toFixed(5); state.dec = +s.dec.toFixed(5); marker = null; reload();
     });
+    let wheelTimer = null;
+    stage.addEventListener("wheel", (ev) => {
+      ev.preventDefault();
+      const delta = Math.sign(ev.deltaY);
+      const step = state.fov < 300 ? 30 : (state.fov < 900 ? 60 : 120);
+      const nextFov = Math.max(60, Math.min(1800, state.fov + delta * step));
+      if (nextFov !== state.fov) {
+        state.fov = nextFov;
+        $("fov").value = state.fov;
+        $("fovOut").textContent = state.fov + "″ (" + (state.fov / 60).toFixed(1) + "′)";
+        clearTimeout(wheelTimer);
+        wheelTimer = setTimeout(reload, 180);
+      }
+    }, { passive: false });
     new ResizeObserver(drawOverlay).observe(stage);
   }
 
@@ -279,26 +293,47 @@
         } catch (e) { applyFrame(i, { error: e }); }
       });
       if (token !== loadToken) return;
-      const lows = [...byIdx.entries()].sort((a, b) => a[0] - b[0]).map(([, f]) => f);
-      if (!lows.length) return setMsg("Sin datos válidos en esta banda para esta posición.", true);
+      const validJobs = [...byIdx.entries()].sort((a, b) => a[0] - b[0]).map(([k, f]) => ({ idx0: k, f, job: jobs[k] }));
+      if (!validJobs.length) return setMsg("Sin datos válidos en esta banda para esta posición.", true);
       setMsg(failed ? `${failed} época(s) sin datos válidos.` : "");
 
       // escala de grises comun para todas las epocas (se aplica al pedir la alta resolucion)
       let lim = {};
-      if (state.common && lows.length > 1) {
-        lim = { vmin: Math.min(...lows.map((f) => f.meta.vmin)), vmax: Math.max(...lows.map((f) => f.meta.vmax)) };
+      if (state.common && validJobs.length > 1) {
+        lim = { vmin: Math.min(...validJobs.map((x) => x.f.meta.vmin)), vmax: Math.max(...validJobs.map((x) => x.f.meta.vmax)) };
       }
 
       // fase 2 (sin esperar): alta resolucion, cada fotograma sustituye a su version baja
-      mapLimit(lows, 4, async (f, i) => {
+      mapLimit(validJobs, 4, async (x) => {
         if (token !== loadToken) return;
         try {
-          replaceFrame(f.idx0, await fetchFrame(frameUrl(f.kind, { ...f.extra, ...lim })));
+          replaceFrame(x.idx0, await fetchFrame(frameUrl(x.job.kind, { ...x.job.extra, ...lim })));
         } catch { /* se conserva la baja resolucion */ }
       });
+
+      // precalentamiento especulativo: todas las demas bandas y niveles de zoom contiguos
+      schedulePrefetch(state.ra, state.dec, state.fov, det);
     } catch (e) {
       if (token === loadToken) setMsg(e.message, true);
     }
+  }
+
+  let prefetchTimer = null;
+  function schedulePrefetch(ra, dec, fov, currentDet) {
+    clearTimeout(prefetchTimer);
+    prefetchTimer = setTimeout(() => {
+      // 1. Todas las demas bandas en segundo plano en Redis
+      fetch(`${API}/cutout/prewarm?ra=${ra}&dec=${dec}&fov=${fov}&band=all`).catch(() => {});
+      // 2. Niveles de zoom adyacentes (un paso adentro y un paso afuera)
+      const fovIn = Math.max(60, fov - (fov <= 120 ? 30 : 60));
+      const fovOut = Math.min(1800, fov + (fov >= 1200 ? 120 : 60));
+      if (fovIn !== fov) {
+        fetch(`${API}/cutout/prewarm?ra=${ra}&dec=${dec}&fov=${fovIn}&band=${currentDet}`).catch(() => {});
+      }
+      if (fovOut !== fov) {
+        fetch(`${API}/cutout/prewarm?ra=${ra}&dec=${dec}&fov=${fovOut}&band=${currentDet}`).catch(() => {});
+      }
+    }, 450);
   }
 
   function paintEpochs(det) {
