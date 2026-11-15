@@ -6,7 +6,7 @@
 <title>SPHEREx Blink · 102-Band Time-Series Viewer</title>
 <meta name="description" content="WiseView-style viewer for NASA SPHEREx images: multi-epoch blinking, difference, coaddition, and 102-channel spectra.">
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=23">
 </head>
 <body>
 <header class="top">
@@ -37,6 +37,7 @@
 
     <section>
       <h2>Position</h2>
+      <p class="field-hint" style="font-size: 11px; color: var(--muted); margin: -4px 0 8px;">No coordinates needed: drag the sky to pan, scroll/pinch to zoom, or enter values below:</p>
       <div class="row2">
         <label>RA (°)<input id="ra" type="number" step="any" min="0" max="360" title="Right Ascension (RA)&#10;Celestial coordinate in decimal degrees [0° to 360°]"></label>
         <label>Dec (°)<input id="dec" type="number" step="any" min="-90" max="90" title="Declination (Dec)&#10;Celestial coordinate in decimal degrees [−90° to +90°]"></label>
@@ -178,7 +179,7 @@
       <span id="cursor" title="Real-time celestial coordinates&#10;Right Ascension and Declination in degrees under mouse cursor">—</span>
       <span id="frameMeta" title="Astronomical metadata&#10;Observation date, exposure count, exact FOV, and pixel resolution"></span>
     </div>
-    <p class="hint">Click/tap: spectrum · Drag: pan · Pinch or +/−: zoom · Double tap: center.</p>
+    <p class="hint"><strong>No coordinates required:</strong> Drag to pan · Scroll wheel or pinch (+/−) to zoom · Double-click to center · Click any pixel for 102-band spectrum.</p>
   </section>
 
   <aside class="panel sed" aria-label="Spectrum">
@@ -251,6 +252,6 @@
   </form>
 </dialog>
 <script src="chart.js?v=5"></script>
-<script src="app.js?v=21"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>
