@@ -6,7 +6,7 @@
 <title>SPHEREx Blink · visor temporal de 102 bandas</title>
 <meta name="description" content="Visor tipo WiseView para las imágenes de NASA SPHEREx: parpadeo entre épocas, diferencia, coadición y espectro de 102 canales.">
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css?v=18">
+<link rel="stylesheet" href="style.css?v=19">
 </head>
 <body>
 <header class="top">
@@ -20,8 +20,8 @@
     <a href="/forum.html">Foro</a>
   </nav>
   <form id="search" class="search" autocomplete="off">
-    <input id="q" type="search" placeholder="Nombre u «RA Dec» en grados — p. ej. WISE 0855 o 269.452 4.693" aria-label="Buscar objeto o coordenadas">
-    <button type="submit">Ir</button>
+    <input id="q" type="search" placeholder="Nombre u «RA Dec» en grados — p. ej. WISE 0855 o 269.452 4.693" aria-label="Buscar objeto o coordenadas" title="Buscar objeto o coordenadas celestes&#10;Introduce un nombre astronómico (ej. WISE 0855) o coordenadas «RA Dec» en grados (ej. 269.452 4.693)">
+    <button type="submit" title="Buscar&#10;Centra el visor en las coordenadas o el objeto buscado">Ir</button>
   </form>
 </header>
 
@@ -30,7 +30,7 @@
     <details class="fold" data-fold="targets" open>
       <summary>
         <h2>Objetivos de prueba</h2>
-        <button id="randCoord" type="button" class="btn-rand" title="Generar coordenadas aleatorias (alta cobertura SPHEREx o interés científico)">🎲 Aleatorio</button>
+        <button id="randCoord" type="button" class="btn-rand" title="🎲 Coordenadas aleatorias&#10;Genera una posición celeste aleatoria con buena cobertura de épocas en SPHEREx">🎲 Aleatorio</button>
       </summary>
       <div id="targets" class="chips"></div>
     </details>
@@ -38,35 +38,35 @@
     <section>
       <h2>Posición</h2>
       <div class="row2">
-        <label>RA (°)<input id="ra" type="number" step="any" min="0" max="360"></label>
-        <label>Dec (°)<input id="dec" type="number" step="any" min="-90" max="90"></label>
+        <label>RA (°)<input id="ra" type="number" step="any" min="0" max="360" title="Ascensión Recta (RA)&#10;Coordenada celeste en grados decimales [0° a 360°]"></label>
+        <label>Dec (°)<input id="dec" type="number" step="any" min="-90" max="90" title="Declinación (Dec)&#10;Coordenada celeste en grados decimales [−90° a +90°]"></label>
       </div>
       <div class="row2 fov-row">
         <label>Campo de visión (″)
-          <input id="fovExact" type="number" min="10" max="3600" step="any" placeholder="300">
+          <input id="fovExact" type="number" min="10" max="3600" step="any" placeholder="300" title="Campo de visión exacto (FOV)&#10;Tamaño angular en segundos de arco (″)">
         </label>
         <label>Equivalente
-          <output id="fovOut" class="mono fov-equiv">—</output>
+          <output id="fovOut" class="mono fov-equiv" title="Equivalencia angular&#10;Tamaño del campo expresado en minutos de arco (′)">—</output>
         </label>
       </div>
-      <input id="fov" type="range" min="30" max="1800" step="1" title="Ajuste fino de campo de visión">
+      <input id="fov" type="range" min="30" max="1800" step="1" title="Deslizador de campo de visión&#10;Ajusta el zoom angular de 30″ a 1800″ (30′)">
       <div id="fovPresets" class="chips fov-presets" style="margin-top: 6px;" aria-label="Ajustes estándar de FOV">
-        <button type="button" data-fov="60">1′</button>
-        <button type="button" data-fov="120">2′</button>
-        <button type="button" data-fov="240">4′</button>
-        <button type="button" data-fov="300">5′</button>
-        <button type="button" data-fov="600">10′</button>
-        <button type="button" data-fov="900">15′</button>
-        <button type="button" data-fov="1800">30′</button>
+        <button type="button" data-fov="60" title="Campo de 1 minuto de arco (60″)&#10;Máxima resolución para estrellas individuales y objetos compactos">1′</button>
+        <button type="button" data-fov="120" title="Campo de 2 minutos de arco (120″)&#10;Resolución idónea para fuentes puntuales y su entorno inmediato">2′</button>
+        <button type="button" data-fov="240" title="Campo de 4 minutos de arco (240″)&#10;Tamaño estándar recomendado para búsquedas de movimiento propio">4′</button>
+        <button type="button" data-fov="300" title="Campo de 5 minutos de arco (300″)&#10;Vista amplia para agrupaciones estelares medias">5′</button>
+        <button type="button" data-fov="600" title="Campo de 10 minutos de arco (600″)&#10;Perspectiva amplia de contexto celeste">10′</button>
+        <button type="button" data-fov="900" title="Campo de 15 minutos de arco (900″)&#10;Vista de gran campo equivalente a medio diámetro lunar">15′</button>
+        <button type="button" data-fov="1800" title="Campo de 30 minutos de arco (1800″)&#10;Máximo campo de visión: tamaño aproximado de la Luna llena">30′</button>
       </div>
     </section>
 
     <section>
       <h2>Banda</h2>
       <div id="bands" class="seg" role="group" aria-label="Detector"></div>
-      <label class="check"><input id="useCh" type="checkbox"> Canal fino (1–102)</label>
+      <label class="check" title="Canal espectral fino&#10;Activar selección de uno de los 102 canales monocromáticos de SPHEREx"><input id="useCh" type="checkbox"> Canal fino (1–102)</label>
       <label id="chWrap" hidden>Canal <output id="chOut"></output>
-        <input id="ch" type="range" min="1" max="102" step="1">
+        <input id="ch" type="range" min="1" max="102" step="1" title="Canal espectral (1 a 102)&#10;Ajusta la longitud de onda monocromática exacta">
       </label>
     </section>
 
@@ -78,15 +78,15 @@
         <button type="button" data-mode="coadd">Coadición</button>
       </div>
       <label id="refWrap" hidden>Época de referencia
-        <select id="ref"></select>
+        <select id="ref" title="Época de referencia&#10;Fotograma base que se resta a todas las demás épocas en el modo diferencia"></select>
       </label>
     </section>
 
     <details class="fold" data-fold="image">
-      <summary><h2>Imagen</h2></summary>
+      <summary title="Parámetros visuales&#10;Estirado de contraste, velocidad de parpadeo y opciones de visualización"><h2>Imagen</h2></summary>
       <div class="row2">
         <label>Estirado
-          <select id="stretch">
+          <select id="stretch" title="Función de estirado de contraste&#10;Mapeo del flujo astronómico: asinh (recomendado), log, raíz o lineal">
             <option value="asinh">asinh</option>
             <option value="log">log</option>
             <option value="sqrt">raíz</option>
@@ -94,44 +94,72 @@
           </select>
         </label>
         <label>Velocidad <output id="speedOut"></output>
-          <input id="speed" type="range" min="100" max="1500" step="50">
+          <input id="speed" type="range" min="100" max="1500" step="50" title="Velocidad de reproducción&#10;Tiempo de permanencia de cada fotograma (100 ms a 1500 ms)">
         </label>
       </div>
-      <label class="check"><input id="invert" type="checkbox"> Invertir (negativo)</label>
-      <label class="check"><input id="common" type="checkbox" checked> Misma escala en todas las épocas</label>
-      <label class="check"><input id="cross" type="checkbox" checked> Retícula central</label>
+      <label class="check" title="Invertir imagen (negativo)&#10;Fondo blanco y estrellas oscuras; aumenta la agudeza visual para fuentes débiles"><input id="invert" type="checkbox"> Invertir (negativo)</label>
+      <label class="check" title="Misma escala en todas las épocas&#10;Fija los límites de intensidad para evitar saltos de brillo entre épocas"><input id="common" type="checkbox" checked> Misma escala en todas las épocas</label>
+      <label class="check" title="Retícula central&#10;Muestra una cruz de mira en el centro exacto de las coordenadas de apuntado"><input id="cross" type="checkbox" checked> Retícula central</label>
     </details>
 
     <section>
       <h2>Superposición de telescopios</h2>
-      <label class="check">
+      <label class="check" title="✦ Superposición Gaia DR3 (óptico)&#10;🟣 Violeta: Estrellas ópticas y vectores de movimiento propio (PM) a 25 años&#10;🔴 Rojo: PM rápido (>120 mas/año, candidato Planeta X / enana marrón)">
         <input id="overlayGaia" type="checkbox">
         <span class="cat-pill cat-gaia"></span> Gaia DR3 (óptico · vectores PM)
       </label>
-      <label class="check">
+      <label class="check" title="■ Superposición AllWISE (infrarrojo)&#10;🟠 Naranja: Fuentes en bandas W1 (3.4 µm) y W2 (4.6 µm)&#10;💗 Rosa: Fuentes ultra-frías (W1−W2 > 1.2, enanas marrones tipo Y)">
         <input id="overlayWise" type="checkbox">
         <span class="cat-pill cat-wise"></span> WISE (AllWISE · infrarrojo W1/W2)
       </label>
-      <div id="catalogLegend" class="catalog-legend" hidden>
-        <span id="gaiaLegend" class="legend-badge gaia-badge" hidden>Gaia: <b id="gaiaCount">0</b></span>
-        <span id="wiseLegend" class="legend-badge wise-badge" hidden>WISE: <b id="wiseCount">0</b></span>
+      <div id="catalogLegend" class="catalog-legend" aria-label="Leyenda de colores de telescopios">
+        <div id="gaiaLegend" class="legend-group gaia-group" title="✦ Catálogo Gaia DR3 (óptico y astrometría)&#10;🟣 Violeta: Estrellas ópticas y vectores de movimiento propio (PM) a 25 años&#10;🔴 Rojo: PM rápido (>120 mas/año, candidatas a enanas marrones cercanas o Planeta X)">
+          <div class="legend-head">
+            <span class="cat-pill cat-gaia"></span>
+            <b>Gaia DR3</b>
+            <span class="legend-count">(<b id="gaiaCount">0</b> fuentes)</span>
+          </div>
+          <div class="legend-items">
+            <span class="leg-chip"><i class="leg-icon icon-purple"></i> <b>Violeta:</b> Óptico / PM 25a</span>
+            <span class="leg-chip"><i class="leg-icon icon-red"></i> <b>Rojo:</b> PM rápido (&gt;120 mas/a)</span>
+          </div>
+        </div>
+        <div id="wiseLegend" class="legend-group wise-group" title="■ Catálogo AllWISE (infrarrojo espacial)&#10;🟠 Naranja: Fuentes detectadas en bandas W1 (3.4 µm) y W2 (4.6 µm)&#10;💗 Rosa: Fuentes ultra-frías (W1−W2 > 1.2, firma térmica de enanas Y o Planeta X)">
+          <div class="legend-head">
+            <span class="cat-pill cat-wise"></span>
+            <b>AllWISE</b>
+            <span class="legend-count">(<b id="wiseCount">0</b> fuentes)</span>
+          </div>
+          <div class="legend-items">
+            <span class="leg-chip"><i class="leg-icon icon-orange"></i> <b>Naranja:</b> W1 (3.4 µm) / W2 (4.6 µm)</span>
+            <span class="leg-chip"><i class="leg-icon icon-pink"></i> <b>Rosa:</b> Ultra-frío (W1−W2 &gt; 1.2)</span>
+          </div>
+        </div>
       </div>
     </section>
 
-    <button id="apply" class="primary" type="button">Actualizar vista</button>
-    <button id="share" type="button">Copiar enlace</button>
+    <button id="apply" class="primary" type="button" title="Actualizar vista&#10;Carga las imágenes de SPHEREx con las coordenadas y parámetros seleccionados">Actualizar vista</button>
+    <button id="share" type="button" title="Copiar enlace&#10;Copia al portapapeles la URL permanente con la vista actual y sus parámetros exactos">Copiar enlace</button>
   </aside>
 
   <section class="viewer" aria-label="Visor">
     <div id="stage" class="stage">
       <div id="viewerBuffer" class="buffer-wrap"><div class="buffer-fill"></div></div>
       <div class="stage-zoom" aria-label="Controles de zoom">
-        <button id="zoomIn" type="button" title="Acercar (+)">+</button>
-        <button id="zoomOut" type="button" title="Alejar (−)">−</button>
+        <button id="zoomIn" type="button" title="Acercar zoom (+ o rueda del ratón hacia arriba)&#10;Amplía la vista conservando la resolución nativa de los detectores de SPHEREx">+</button>
+        <button id="zoomOut" type="button" title="Alejar zoom (− o rueda del ratón hacia abajo)&#10;Reduce la ampliación para observar un campo más extenso">−</button>
       </div>
       <div class="stage-overlays" aria-label="Capas externas">
-        <button id="stageGaia" type="button" class="btn-layer" title="Alternar superposición Gaia DR3 (óptico · vectores PM)">Gaia</button>
-        <button id="stageWise" type="button" class="btn-layer" title="Alternar superposición WISE (infrarrojo W1/W2)">WISE</button>
+        <button id="stageGaia" type="button" class="btn-layer" title="✦ Superposición Gaia DR3 (óptico)&#10;🟣 Violeta: Estrellas ópticas y vectores PM a 25 años&#10;🔴 Rojo: PM rápido (>120 mas/año, candidato Planeta X / enana marrón)">Gaia</button>
+        <button id="stageWise" type="button" class="btn-layer" title="■ Superposición AllWISE (infrarrojo espacial)&#10;🟠 Naranja: Fuentes en bandas W1 (3.4 µm) y W2 (4.6 µm)&#10;💗 Rosa: Fuentes ultra-frías (W1−W2 > 1.2, enanas marrones tipo Y)">WISE</button>
+      </div>
+      <div id="stageLegend" class="stage-legend" hidden>
+        <span id="stageGaiaLeg" class="stage-leg-tag leg-tag-gaia" hidden title="✦ Superposición Gaia DR3 (óptico)&#10;🟣 Violeta: Estrellas y vectores PM a 25 años&#10;🔴 Rojo: PM rápido (>120 mas/año, candidato Planeta X / enana marrón)">
+          <i class="leg-icon icon-purple"></i> Gaia <small>🟣 óptico · 🔴 rápido</small>
+        </span>
+        <span id="stageWiseLeg" class="stage-leg-tag leg-tag-wise" hidden title="■ Superposición AllWISE (infrarrojo espacial)&#10;🟠 Naranja: Fuentes en bandas W1 (3.4 µm) y W2 (4.6 µm)&#10;💗 Rosa: Fuentes ultra-frías (W1−W2 > 1.2, enanas tipo Y)">
+          <i class="leg-icon icon-orange"></i> WISE <small>🟠 W1/W2 · 💗 ultra-frío</small>
+        </span>
       </div>
       <img id="img" alt="Fotograma SPHEREx" draggable="false">
       <canvas id="overlay"></canvas>
@@ -140,15 +168,15 @@
       <div id="msg" class="msg">Elige un objetivo o introduce coordenadas.</div>
     </div>
     <div class="transport">
-      <button id="prev" type="button" title="Anterior (←)">◀</button>
-      <button id="play" type="button" title="Reproducir/pausar (espacio)">❚❚</button>
-      <button id="next" type="button" title="Siguiente (→)">▶</button>
-      <input id="scrub" type="range" min="0" max="0" step="1" aria-label="Fotograma">
-      <span id="frameLabel" class="mono"></span>
+      <button id="prev" type="button" title="Época anterior (flecha izquierda ←)&#10;Retrocede al fotograma anterior de la secuencia temporal">◀</button>
+      <button id="play" type="button" title="Reproducir / Pausar (barra espaciadora)&#10;Inicia o detiene la animación continua de parpadeo">❚❚</button>
+      <button id="next" type="button" title="Época siguiente (flecha derecha →)&#10;Avanza al siguiente fotograma de la secuencia temporal">▶</button>
+      <input id="scrub" type="range" min="0" max="0" step="1" aria-label="Fotograma" title="Línea de tiempo de épocas&#10;Desplaza el control deslizante para elegir una época específica">
+      <span id="frameLabel" class="mono" title="Índice de época y fecha&#10;Fotograma activo respecto al total de observaciones disponibles"></span>
     </div>
     <div class="readout mono">
-      <span id="cursor">—</span>
-      <span id="frameMeta"></span>
+      <span id="cursor" title="Coordenadas celestes en tiempo real&#10;Ascensión Recta y Declinación en grados bajo el cursor del ratón">—</span>
+      <span id="frameMeta" title="Metadatos astronómicos&#10;Fecha de observación, número de exposiciones, FOV exacto y resolución"></span>
     </div>
     <p class="hint">Clic/toca: espectro · Arrastra: desplazar · Pellizca o +/−: zoom · Doble toque: centrar.</p>
   </section>
@@ -223,6 +251,6 @@
   </form>
 </dialog>
 <script src="chart.js?v=2"></script>
-<script src="app.js?v=17"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>

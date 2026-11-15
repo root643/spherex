@@ -4,11 +4,11 @@
   const API = "/api/v1";
   const $ = (id) => document.getElementById(id);
   const TARGETS = [
-    { name: "Barnard", q: "Barnard's Star", ra: 269.4521, dec: 4.6934, fov: 240, band: "D2" },
-    { name: "WISE 0855", q: "WISE 0855-0714", ra: 133.7951, dec: -7.2451, fov: 240, band: "D5" },
-    { name: "ε Indi B", q: "Epsilon Indi B", ra: 331.044, dec: -56.783, fov: 300, band: "D3" },
-    { name: "RW Aur", q: "RW Aurigae", ra: 76.956, dec: 30.401, fov: 300, band: "D2" },
-    { name: "R Dra", q: "R Draconis", ra: 248.168, dec: 66.755, fov: 300, band: "D2" },
+    { name: "Barnard", q: "Barnard's Star", desc: "Estrella de Barnard: mayor movimiento propio conocido (10.3″/año). Muy visible en parpadeo temporal.", ra: 269.4521, dec: 4.6934, fov: 240, band: "D2" },
+    { name: "WISE 0855", q: "WISE 0855-0714", desc: "WISE 0855-0714: enana marrón sub-estelar más fría (~250 K), observable en bandas térmicas D5/D6.", ra: 133.7951, dec: -7.2451, fov: 240, band: "D5" },
+    { name: "ε Indi B", q: "Epsilon Indi B", desc: "Épsilon Indi B: sistema binario de enanas marrones cercanas (12 años luz) con alto movimiento propio.", ra: 331.044, dec: -56.783, fov: 300, band: "D3" },
+    { name: "RW Aur", q: "RW Aurigae", desc: "RW Aurigae: estrella binaria joven variable tipo T Tauri con disco circunestelar de acreción.", ra: 76.956, dec: 30.401, fov: 300, band: "D2" },
+    { name: "R Dra", q: "R Draconis", desc: "R Draconis: gigante roja pulsante variable tipo Mira con intensos cambios de brillo entre épocas.", ra: 248.168, dec: 66.755, fov: 300, band: "D2" },
   ];
   const DET = { 1: [0.75, 1.10], 2: [1.10, 1.63], 3: [1.63, 2.42], 4: [2.42, 3.83], 5: [3.83, 4.42], 6: [4.42, 5.0] };
   const DET_COLOR = ["#7aa2f7", "#7fd1b9", "#c3e88d", "#ffb454", "#ff8a65", "#f07178"];
@@ -261,21 +261,29 @@
   function updateGaiaUI() {
     if ($("overlayGaia")) $("overlayGaia").checked = state.gaia;
     if ($("stageGaia")) $("stageGaia").classList.toggle("active-gaia", state.gaia);
-    if ($("gaiaLegend")) $("gaiaLegend").hidden = !state.gaia;
+    if ($("gaiaLegend")) $("gaiaLegend").classList.toggle("active", state.gaia);
+    if ($("stageGaiaLeg")) $("stageGaiaLeg").hidden = !state.gaia;
     if (state.gaia && $("gaiaCount")) {
       $("gaiaCount").textContent = gaiaSources.length;
+    } else if ($("gaiaCount")) {
+      $("gaiaCount").textContent = "0";
     }
-    if ($("catalogLegend")) $("catalogLegend").hidden = !state.gaia && !state.wise;
+    const anyActive = state.gaia || state.wise;
+    if ($("stageLegend")) $("stageLegend").hidden = !anyActive;
   }
 
   function updateWiseUI() {
     if ($("overlayWise")) $("overlayWise").checked = state.wise;
     if ($("stageWise")) $("stageWise").classList.toggle("active-wise", state.wise);
-    if ($("wiseLegend")) $("wiseLegend").hidden = !state.wise;
+    if ($("wiseLegend")) $("wiseLegend").classList.toggle("active", state.wise);
+    if ($("stageWiseLeg")) $("stageWiseLeg").hidden = !state.wise;
     if (state.wise && $("wiseCount")) {
       $("wiseCount").textContent = wiseSources.length;
+    } else if ($("wiseCount")) {
+      $("wiseCount").textContent = "0";
     }
-    if ($("catalogLegend")) $("catalogLegend").hidden = !state.gaia && !state.wise;
+    const anyActive = state.gaia || state.wise;
+    if ($("stageLegend")) $("stageLegend").hidden = !anyActive;
   }
 
   let catalogReqId = 0;
@@ -401,18 +409,35 @@
     if ($("randCoord")) $("randCoord").onclick = handleRandomCoordinates;
     TARGETS.forEach((t) => {
       const b = document.createElement("button");
-      b.type = "button"; b.textContent = t.name; b.title = t.q;
+      b.type = "button"; b.textContent = t.name;
+      b.title = `${t.name} (${t.q})\n${t.desc}`;
       b.onclick = () => { Object.assign(state, { ra: t.ra, dec: t.dec, fov: t.fov, band: t.band }); marker = null; targetName = t.q; reload(); };
       $("targets").appendChild(b);
     });
+    const DET_DESC = {
+      1: "Detector 1 (0.75 – 1.10 µm)\nInfrarrojo cercano óptico (NIR). Óptimo para estrellas frías y enanas M.",
+      2: "Detector 2 (1.10 – 1.63 µm)\nInfrarrojo cercano (banda J). Detecta firmas de absorción de agua e hidrocarburos.",
+      3: "Detector 3 (1.63 – 2.42 µm)\nInfrarrojo cercano (bandas H y K). Sensible a hielos interestelares y nubes de polvo.",
+      4: "Detector 4 (2.42 – 3.83 µm)\nInfrarrojo medio (MIR). Cubre la banda profunda de absorción de hielo de agua (3.05 µm).",
+      5: "Detector 5 (3.83 – 4.42 µm)\nInfrarrojo medio (MIR). Incluye la banda diagnóstica de hielo de CO2 (4.27 µm).",
+      6: "Detector 6 (4.42 – 5.00 µm)\nLímite infrarrojo de SPHEREx. Máxima sensibilidad a fuentes ultrafrías y enanas tipo Y."
+    };
     for (let d = 1; d <= 6; d++) {
       const b = document.createElement("button");
       b.type = "button"; b.dataset.det = d; b.textContent = "D" + d;
-      b.title = `Detector ${d}: ${DET[d][0]}–${DET[d][1]} µm`;
+      b.title = DET_DESC[d];
       b.onclick = () => { state.band = "D" + d; reload(); };
       $("bands").appendChild(b);
     }
-    [...$("modes").children].forEach((b) => (b.onclick = () => { state.mode = b.dataset.mode; reload(); }));
+    const MODE_DESC = {
+      blink: "Modo Parpadeo (Blink)\nAlterna sucesivamente las épocas de SPHEREx para detectar movimiento aparente o variabilidad temporal.",
+      diff: "Modo Diferencia (Resta)\nResta cada época contra la de referencia. Los objetos fijos se anulan, resaltando movimiento o cambio de brillo.",
+      coadd: "Modo Coadición (Suma/Promedio)\nPromedia todas las épocas observadas para maximizar la relación señal-ruido y revelar fuentes muy débiles."
+    };
+    [...$("modes").children].forEach((b) => {
+      b.title = MODE_DESC[b.dataset.mode] || b.textContent;
+      b.onclick = () => { state.mode = b.dataset.mode; reload(); };
+    });
     $("fov").oninput = () => {
       state.fov = +$("fov").value;
       if ($("fovExact")) $("fovExact").value = state.fov;
@@ -1622,11 +1647,105 @@
     } catch { $("stats").textContent = "caché: sin conexión con la API"; }
   }
 
+  // ------------------------------------------------------------------ tooltips universales en hover
+  function setupTooltips() {
+    let tipEl = $("uiTooltip");
+    if (!tipEl) {
+      tipEl = document.createElement("div");
+      tipEl.id = "uiTooltip";
+      tipEl.className = "ui-tooltip";
+      tipEl.hidden = true;
+      document.body.appendChild(tipEl);
+    }
+    let hideTimer = null;
+    let showTimer = null;
+    let currentTarget = null;
+
+    function renderTip(el) {
+      const text = el.dataset.tip;
+      if (!text || !text.trim()) return;
+      currentTarget = el;
+      tipEl.textContent = "";
+
+      const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+      if (lines.length > 1) {
+        const titleLine = document.createElement("div");
+        titleLine.className = "tooltip-title";
+        titleLine.textContent = lines[0];
+        tipEl.appendChild(titleLine);
+        for (let i = 1; i < lines.length; i++) {
+          const p = document.createElement("div");
+          p.className = "tooltip-line";
+          p.textContent = lines[i];
+          tipEl.appendChild(p);
+        }
+      } else {
+        tipEl.textContent = text;
+      }
+
+      tipEl.hidden = false;
+      tipEl.classList.remove("visible");
+
+      const r = el.getBoundingClientRect();
+      const tipRect = tipEl.getBoundingClientRect();
+      let top = r.top - tipRect.height - 8;
+      let left = r.left + (r.width - tipRect.width) / 2;
+
+      if (top < 10) top = r.bottom + 8;
+      if (left < 10) left = 10;
+      if (left + tipRect.width > window.innerWidth - 10) {
+        left = window.innerWidth - tipRect.width - 10;
+      }
+
+      tipEl.style.top = `${Math.round(top)}px`;
+      tipEl.style.left = `${Math.round(left)}px`;
+      requestAnimationFrame(() => {
+        if (currentTarget === el) tipEl.classList.add("visible");
+      });
+    }
+
+    function hideTip() {
+      clearTimeout(showTimer);
+      currentTarget = null;
+      tipEl.classList.remove("visible");
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => {
+        if (!currentTarget) tipEl.hidden = true;
+      }, 150);
+    }
+
+    document.addEventListener("mouseover", (ev) => {
+      const target = ev.target.closest("[data-tip], [title]");
+      if (!target || target === currentTarget) return;
+      if (target.hasAttribute("title") && !target.dataset.tip) {
+        target.dataset.tip = target.getAttribute("title");
+        target.removeAttribute("title");
+      }
+      clearTimeout(showTimer);
+      showTimer = setTimeout(() => {
+        renderTip(target);
+      }, 70);
+    });
+
+    document.addEventListener("mouseout", (ev) => {
+      if (!currentTarget) return;
+      const target = ev.target.closest("[data-tip]");
+      if (target === currentTarget) {
+        if (ev.relatedTarget && currentTarget.contains(ev.relatedTarget)) return;
+        hideTip();
+      }
+    });
+
+    document.addEventListener("pointerdown", hideTip, { passive: true });
+    window.addEventListener("scroll", hideTip, { passive: true });
+  }
+
   viewerLoader = createBufferLoader($("viewerBuffer"), $("msg"));
   chartLoader = createBufferLoader($("chartBuffer"), $("sedInfo"));
   buildControls(); paintControls();
   if (state.ra == null) { Object.assign(state, { ra: TARGETS[0].ra, dec: TARGETS[0].dec, fov: TARGETS[0].fov, band: TARGETS[0].band }); }
   setupPublish();
+  setupTooltips();
   // secciones plegables: se recuerda si cada una estaba abierta o cerrada
   // la seccion "image" se mantiene cerrada de forma automatica al cargar
   document.querySelectorAll("details.fold").forEach((d) => {
