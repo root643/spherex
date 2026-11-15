@@ -370,6 +370,7 @@
   function paintControls() {
     $("ra").value = state.ra ?? ""; $("dec").value = state.dec ?? "";
     if ($("fovExact")) $("fovExact").value = state.fov;
+    if ($("fovEquiv")) $("fovEquiv").value = (state.fov / 60).toFixed(2) + "′";
     $("fov").value = Math.min(1800, Math.max(30, state.fov));
     $("fovOut").textContent = `${state.fov}″ (${(state.fov / 60).toFixed(2)}′)`;
     if ($("fovPresets")) {
@@ -678,8 +679,11 @@
     let mouseMoved = false;
 
     stage.addEventListener("mousedown", (ev) => {
+      if (ev.target.closest(".stage-zoom, .stage-overlays, .buffer-wrap")) return;
       if (ev.button !== 0) return;
       if (performance.now() < suppressClickUntil) return;
+      const img = $("img");
+      if (img) img.classList.remove("panning");
       isMouseDown = true;
       mouseMoved = false;
       mouseStartX = ev.clientX;
@@ -732,7 +736,7 @@
           paintControls();
           syncUrl();
           clearTimeout(dragDebounceTimer);
-          dragDebounceTimer = setTimeout(() => reload({ recenterOnly: true }), 260);
+          dragDebounceTimer = setTimeout(() => reload({ recenterOnly: true }), 180);
         }
       }
     };
@@ -741,6 +745,10 @@
 
     // Pantallas táctiles (móvil)
     stage.addEventListener("touchstart", (ev) => {
+      if (ev.target.closest(".stage-zoom, .stage-overlays, .buffer-wrap")) return;
+      const img = $("img");
+      if (img) img.classList.remove("panning");
+
       if (ev.touches.length === 2) {
         isPinching = true;
         isDragging = false;
@@ -751,6 +759,8 @@
           ev.touches[0].clientY - ev.touches[1].clientY
         );
         initialPinchFov = state.fov;
+        startPanX = panOffset.x;
+        startPanY = panOffset.y;
         return;
       }
       if (ev.touches.length === 1) {
@@ -765,6 +775,8 @@
     }, { passive: false });
 
     stage.addEventListener("touchmove", (ev) => {
+      if (ev.target.closest(".stage-zoom, .stage-overlays, .buffer-wrap")) return;
+
       if (isPinching && ev.touches.length >= 2) {
         ev.preventDefault();
         abortSpectrum();
@@ -774,11 +786,10 @@
         );
         if (dist > 10 && initialPinchDist > 0) {
           const factor = initialPinchDist / dist;
-          const nextFov = Math.max(60, Math.min(1800, Math.round((initialPinchFov * factor) / 30) * 30));
+          const nextFov = Math.max(30, Math.min(1800, Math.round(initialPinchFov * factor)));
           if (nextFov !== state.fov) {
             state.fov = nextFov;
             paintControls();
-            syncUrl();
             applyVisualTransform();
           }
         }
@@ -802,12 +813,15 @@
     }, { passive: false });
 
     stage.addEventListener("touchend", (ev) => {
+      if (ev.target.closest(".stage-zoom, .stage-overlays, .buffer-wrap")) return;
+
       if (isPinching) {
         if (ev.touches.length < 2) {
           isPinching = false;
           suppressClickUntil = performance.now() + 350;
+          syncUrl();
           clearTimeout(zoomDebounceTimer);
-          zoomDebounceTimer = setTimeout(() => reload({ zoomOnly: true }), 260);
+          zoomDebounceTimer = setTimeout(() => reload({ zoomOnly: true }), 180);
         }
         return;
       }
@@ -824,7 +838,7 @@
           paintControls();
           syncUrl();
           clearTimeout(dragDebounceTimer);
-          dragDebounceTimer = setTimeout(() => reload({ recenterOnly: true }), 260);
+          dragDebounceTimer = setTimeout(() => reload({ recenterOnly: true }), 180);
         }
         return;
       }
@@ -875,6 +889,7 @@
 
     let tooltipTimer = null;
     stage.addEventListener("click", (ev) => {
+      if (ev.target.closest(".stage-zoom, .stage-overlays, .buffer-wrap")) return;
       if (performance.now() < suppressClickUntil) return;
       const nearCat = findNearCatalogSource(ev.clientX, ev.clientY, 16);
       if (nearCat) {
@@ -896,6 +911,7 @@
     });
 
     stage.addEventListener("dblclick", (ev) => {
+      if (ev.target.closest(".stage-zoom, .stage-overlays, .buffer-wrap")) return;
       abortSpectrum();
       suppressClickUntil = performance.now() + 350;
       const s = skyAt(ev);
@@ -1114,18 +1130,15 @@
         newByIdx.forEach((v, k) => byIdx.set(k, v));
         failed = newFailed;
         rebuild();
-        if (!isZoomOnly && !isSameCenter) {
+        if (isZoomOnly || isRecenterOnly || !isSameCenter) {
           panOffset = { x: 0, y: 0 };
-          baseFov = state.fov;
-          applyVisualTransform();
-        } else if (!isZoomOnly && isSameCenter) {
-          baseFov = state.fov;
-          applyVisualTransform();
         }
+        baseFov = state.fov;
         if (frames.length) {
           show(Math.min(idx, frames.length - 1));
           if (frames.length > 1 && playing) play(); else pause(true);
         }
+        applyVisualTransform();
         lastLoadedCenter = { ra: state.ra, dec: state.dec };
         setTimeout(() => {
           oldFrames.forEach((f) => { if (f && f.url) URL.revokeObjectURL(f.url); });
