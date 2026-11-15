@@ -278,6 +278,53 @@
       catch { prompt("Copia este enlace:", location.href); }
       setTimeout(() => ($("share").textContent = "Copiar enlace"), 1500);
     };
+    $("exportGif").onclick = async () => {
+      if (state.ra == null || !frames.length) {
+        setMsg("Carga primero un campo de SPHEREx para exportar el GIF.", true);
+        return;
+      }
+      const btn = $("exportGif");
+      const origText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Generando…";
+      if (viewerLoader) viewerLoader.start("Generando animación GIF de las épocas…");
+      try {
+        const q = new URLSearchParams({
+          ra: state.ra,
+          dec: state.dec,
+          fov: Math.round(state.fov),
+          band: state.band,
+          mode: state.mode === "diff" ? "diff" : "blink",
+          stretch: state.stretch,
+          speed: state.speed
+        });
+        if (state.invert) q.set("invert", "true");
+        if (state.mode === "diff") q.set("ref", state.ref);
+        if (state.common && commonLimits) {
+          q.set("vmin", commonLimits.vmin);
+          q.set("vmax", commonLimits.vmax);
+        }
+        const res = await fetch(`${API}/cutout/gif?${q}`);
+        if (!res.ok) throw new Error(await errText(res));
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        const signDec = state.dec >= 0 ? `+${state.dec.toFixed(4)}` : state.dec.toFixed(4);
+        a.download = `spherex_${state.band}_ra${state.ra.toFixed(4)}_dec${signDec}_fov${Math.round(state.fov)}s.gif`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        if (viewerLoader) viewerLoader.done("¡GIF animado descargado con éxito!");
+      } catch (e) {
+        if (viewerLoader) viewerLoader.fail("Error exportando GIF: " + e.message);
+        else setMsg("Error exportando GIF: " + e.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = origText;
+      }
+    };
     $("search").onsubmit = async (ev) => {
       ev.preventDefault();
       const q = $("q").value.trim();

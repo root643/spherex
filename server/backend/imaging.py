@@ -10,7 +10,7 @@ import math
 import warnings
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 # Rangos nominales de los 6 detectores LVF de SPHEREx (micras)
 DETECTORS = {
@@ -198,6 +198,52 @@ def render_webp(arr: np.ndarray, vmin: float, vmax: float, stretch: str = "asinh
     g = to_gray(arr, vmin, vmax, stretch, invert, diff)
     buf = io.BytesIO()
     Image.fromarray(g).save(buf, format="WEBP", quality=quality, method=4)
+    return buf.getvalue()
+
+
+def render_gif(frames_data: list[tuple[np.ndarray, dict]],
+               stretch: str = "asinh", invert: bool = False, diff: bool = False,
+               duration_ms: int = 500, watermark: bool = True,
+               vmin: float | None = None, vmax: float | None = None) -> bytes:
+    """Genera un GIF animado ultra-rapido a partir de una secuencia de epocas (arr, meta)."""
+    if not frames_data:
+        raise ValueError("Sin fotogramas para generar GIF")
+
+    if vmin is None or vmax is None:
+        all_vmins, all_vmaxs = [], []
+        for arr, _ in frames_data:
+            lo, hi = auto_limits(arr, diff)
+            all_vmins.append(lo)
+            all_vmaxs.append(hi)
+        vmin = min(all_vmins) if all_vmins else -0.05
+        vmax = max(all_vmaxs) if all_vmaxs else 1.0
+
+    pil_images: list[Image.Image] = []
+    for arr, meta in frames_data:
+        g = to_gray(arr, vmin, vmax, stretch, invert, diff)
+        im = Image.fromarray(g).convert("RGB")
+        w, h = im.size
+
+        if watermark:
+            draw = ImageDraw.Draw(im)
+            date_str = str(meta.get("date", ""))
+            if date_str:
+                draw.text((9, 9), date_str, fill=(0, 0, 0))
+                draw.text((8, 8), date_str, fill=(255, 180, 84))
+
+            sub = str(meta.get("label_sub", "SPHEREx"))
+            if sub:
+                draw.text((9, h - 19), sub, fill=(0, 0, 0))
+                draw.text((8, h - 20), sub, fill=(180, 195, 210))
+
+        pal = im.convert("P", palette=Image.Palette.ADAPTIVE)
+        pil_images.append(pal)
+
+    buf = io.BytesIO()
+    first = pil_images[0]
+    rest = pil_images[1:] if len(pil_images) > 1 else []
+    first.save(buf, format="GIF", save_all=True, append_images=rest,
+               duration=max(50, duration_ms), loop=0, optimize=True)
     return buf.getvalue()
 
 

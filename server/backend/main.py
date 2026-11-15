@@ -277,6 +277,65 @@ def cutout_coadd(ra: float = RA, dec: float = DEC, fov: float = FOV, band: str =
     return _image_response(arr, meta, stretch, invert, False, vmin, vmax)
 
 
+@app.get("/api/v1/cutout/gif")
+def cutout_gif(ra: float = RA, dec: float = DEC, fov: float = FOV, band: str = Query("D4"),
+               mode: str = Query("blink", pattern="^(blink|diff)$"),
+               stretch: str = Query("asinh"), invert: bool = False,
+               ref: int = Query(0, ge=0), speed: int = Query(500, ge=50, le=2000),
+               res: str = Query("high", pattern="^(low|high)$"),
+               watermark: bool = Query(True),
+               vmin: Optional[float] = None, vmax: Optional[float] = None):
+    """Genera al vuelo una animacion GIF de las epocas de esa posicion (blink o diferencia).
+    Ultra-rapido: recupera los arrays de Redis y compone el GIF en milisegundos."""
+    ra, dec = _r(ra, dec)
+    fov = float(round(fov))
+    det, lmin, lmax = _band(band)
+    exps = get_exposures(ra, dec)
+    usable_epochs = sorted({e["epoch"] for e in exps if e["detector"] == det})
+    if not usable_epochs:
+        raise HTTPException(404, f"No hay observaciones de SPHEREx en {band} para esa posicion")
+
+    frames_data: list[tuple[np.ndarray, dict]] = []
+    if mode == "diff":
+        if len(usable_epochs) < 2:
+            raise HTTPException(400, "Hacen falta al menos 2 epocas para el modo diferencia")
+        if ref not in usable_epochs:
+            ref = usable_epochs[0]
+        ref_arr, _ = build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, ref), "median",
+                                 MAX_PER_FRAME, res)
+        for ep in usable_epochs:
+            if ep == ref:
+                continue
+            arr, meta = build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, ep), "median",
+                                    MAX_PER_FRAME, res)
+            diff_arr = arr - ref_arr
+            meta_copy = dict(meta)
+            meta_copy["date"] = f"{meta['date']} − ref"
+            meta_copy["label_sub"] = f"SPHEREx · {band} · {int(fov)}″"
+            frames_data.append((diff_arr, meta_copy))
+    else:
+        for ep in usable_epochs:
+            arr, meta = build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, ep), "median",
+                                    MAX_PER_FRAME, res)
+            meta_copy = dict(meta)
+            meta_copy["label_sub"] = f"SPHEREx · {band} · {int(fov)}″"
+            frames_data.append((arr, meta_copy))
+
+    body = imaging.render_gif(frames_data, stretch=stretch, invert=invert, diff=(mode == "diff"),
+                              duration_ms=speed, watermark=watermark, vmin=vmin, vmax=vmax)
+
+    filename = f"spherex_ra{ra:.4f}_dec{dec:.4f}_{band}_fov{int(fov)}.gif"
+    headers = {
+        "Content-Disposition": f'inline; filename="{filename}"',
+        "Content-Type": "image/gif",
+        "Cache-Control": "public, max-age=43200",
+        "X-Spherex-Frames": str(len(frames_data)),
+        "X-Spherex-Fov": str(int(fov)),
+        "X-Spherex-Band": band,
+    }
+    return Response(body, media_type="image/gif", headers=headers)
+
+
 # --------------------------------------------------------------------------- prewarm
 _prewarming: set[tuple] = set()
 _prewarm_lock = threading.Lock()
