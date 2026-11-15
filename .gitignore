@@ -1,0 +1,10 @@
+# claves y secretos: nunca al repositorio
+*.key
+*.key.txt
+*.pem
+id_rsa*
+
+__pycache__/
+*.pyc
+.venv/
+Nuevo Documento de texto.txt

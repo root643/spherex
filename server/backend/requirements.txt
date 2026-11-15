@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+redis
+numpy
+scipy
+astropy
+reproject
+pillow
+requests
