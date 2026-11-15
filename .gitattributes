@@ -1,0 +1,9 @@
+# Saltos de linea: LF en todos los ficheros de texto aunque se clone en Windows
+# (los scripts se ejecutan en Linux y bash no acepta CRLF)
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary
+*.gif binary
+*.webp binary
+*.fits binary

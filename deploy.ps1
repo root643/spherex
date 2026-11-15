@@ -41,7 +41,11 @@ Write-Host "Subiendo el paquete..."
 if ($LASTEXITCODE -ne 0) { throw "scp ha fallado" }
 
 Write-Host "Instalando en el servidor (unos minutos la primera vez)..."
-$remote = "set -o pipefail; rm -rf /tmp/spherex-deploy && mkdir -p /tmp/spherex-deploy && tar -xzf /tmp/spherex-server.tgz -C /tmp/spherex-deploy && sudo bash /tmp/spherex-deploy/server/install.sh 2>&1 | tee /tmp/spherex-install.log"
+# Git en Windows puede haber convertido los saltos de linea a CRLF: en el servidor se
+# devuelven a LF antes de instalar (bash no acepta el \r al final de cada linea)
+$remote = @'
+set -o pipefail; rm -rf /tmp/spherex-deploy && mkdir -p /tmp/spherex-deploy && tar -xzf /tmp/spherex-server.tgz -C /tmp/spherex-deploy && (grep -rlI . /tmp/spherex-deploy | xargs -r sed -i 's/\r$//') && sudo bash /tmp/spherex-deploy/server/install.sh 2>&1 | tee /tmp/spherex-install.log
+'@
 & ssh @opts "$User@$Server" $remote
 $code = $LASTEXITCODE
 Remove-Item $tgz -ErrorAction SilentlyContinue
