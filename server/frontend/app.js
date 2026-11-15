@@ -27,6 +27,8 @@
     ref: Math.max(0, Math.round(num("ref", 0))),
     common: P.get("common") !== "0",
     cross: P.get("cross") !== "0",
+    gaia: P.get("gaia") === "1",
+    wise: P.get("wise") === "1",
   };
   let epochs = [];          // epocas devueltas por /observations
   let frames = [];          // [{url, label, meta}]
@@ -38,6 +40,9 @@
   let panOffset = { x: 0, y: 0 };
   let clickTimer = null;
   let spectrumAbortController = null;
+  let gaiaSources = [];
+  let wiseSources = [];
+  const catalogCache = new Map();
 
   function abortSpectrum() {
     clearTimeout(clickTimer);
@@ -109,6 +114,8 @@
     if (state.mode === "diff") q.set("ref", state.ref);
     if (!state.common) q.set("common", "0");
     if (!state.cross) q.set("cross", "0");
+    if (state.gaia) q.set("gaia", "1");
+    if (state.wise) q.set("wise", "1");
     history.replaceState(null, "", "?" + q.toString());
   }
 
@@ -222,12 +229,141 @@
   // ------------------------------------------------------------------ controles
   function setMsg(text, err) { const m = $("msg"); m.textContent = text || ""; m.classList.toggle("err", !!err); }
 
+  const SCIENTIFIC_TARGETS = [
+    { name: "Barnard's Star", ra: 269.4521, dec: 4.6934, fov: 240, band: "D2", type: "Mayor movimiento propio conocido (10.39″/año)" },
+    { name: "WISE 0855-0714", ra: 133.7951, dec: -7.2451, fov: 240, band: "D5", type: "Enana marrón más fría del cielo (~250 K)" },
+    { name: "ε Indi B", ra: 331.0440, dec: -56.7830, fov: 300, band: "D3", type: "Binaria de enanas marrones (4.70″/año)" },
+    { name: "Luhman 16", ra: 162.2988, dec: -53.3194, fov: 240, band: "D4", type: "Par de enanas marrones más cercano (6.5 al)" },
+    { name: "TRAPPIST-1", ra: 346.6224, dec: -5.0414, fov: 240, band: "D3", type: "Enana roja con 7 planetas templados" },
+    { name: "Polo Eclíptico Norte (NEP)", ra: 270.0000, dec: 66.5607, fov: 360, band: "D4", type: "Campo profundo continua SPHEREx" },
+    { name: "Polo Eclíptico Sur (SEP)", ra: 90.0000, dec: -66.5607, fov: 360, band: "D4", type: "Campo profundo austral SPHEREx" },
+    { name: "Planeta X · Tauro", ra: 62.5000, dec: 18.2500, fov: 300, band: "D5", type: "Zona de búsqueda de Planeta X / TNOs" },
+    { name: "Planeta X · Cetus", ra: 42.1500, dec: -8.4500, fov: 300, band: "D5", type: "Corredor predicho de afelio de Planeta X" },
+    { name: "Planeta X · Ofiuco", ra: 255.3000, dec: -15.8000, fov: 300, band: "D5", type: "Sondeo infrarrojo de alta inclinación" },
+    { name: "Estrella de Teegarden", ra: 43.2537, dec: 16.8813, fov: 240, band: "D2", type: "Enana M de altísimo PM (5.06″/año)" },
+    { name: "Wolf 359", ra: 164.1203, dec: 7.0147, fov: 240, band: "D2", type: "Enana roja fulgurante vecina (4.7″/año)" },
+    { name: "Ross 128", ra: 176.9350, dec: 0.8045, fov: 240, band: "D2", type: "Enana roja inactiva con exoplaneta" },
+    { name: "CW Leonis (IRC +10216)", ra: 146.9892, dec: 13.2787, fov: 300, band: "D6", type: "Estrella de carbono más brillante en IR medio" },
+    { name: "RW Aurigae", ra: 76.9560, dec: 30.4010, fov: 300, band: "D2", type: "Variable T Tauri con caídas profundas" },
+    { name: "R Draconis", ra: 248.1680, dec: 66.7550, fov: 300, band: "D2", type: "Variable Mira clásica (P ~ 245.6 d)" }
+  ];
+
+  function randomCelestialCoord() {
+    const ra = +(Math.random() * 360).toFixed(4);
+    const u = Math.random() * 2 - 1;
+    const dec = +(Math.asin(u) * 180 / Math.PI).toFixed(4);
+    const band = "D" + (Math.floor(Math.random() * 6) + 1);
+    return { name: `Esfera celeste (${ra}° ${dec >= 0 ? "+" : ""}${dec}°)`, ra, dec, fov: 300, band, type: "Distribución uniforme cos(Dec)" };
+  }
+
+  async function handleRandomCoordinates() {
+    let t = null;
+    try {
+      t = await getJson(`${API}/targets/random`);
+    } catch {
+      t = (Math.random() < 0.75)
+        ? SCIENTIFIC_TARGETS[Math.floor(Math.random() * SCIENTIFIC_TARGETS.length)]
+        : randomCelestialCoord();
+    }
+    state.ra = t.ra;
+    state.dec = t.dec;
+    if (t.fov) state.fov = t.fov;
+    if (t.band) state.band = t.band;
+    marker = null;
+    paintControls();
+    syncUrl();
+    setMsg(`🎲 Coordenadas aleatorias: ${t.name} (${t.type || "Interés científico"})`);
+    reload();
+  }
+
+  function updateGaiaUI() {
+    if ($("overlayGaia")) $("overlayGaia").checked = state.gaia;
+    if ($("stageGaia")) $("stageGaia").classList.toggle("active-gaia", state.gaia);
+    if ($("gaiaLegend")) $("gaiaLegend").hidden = !state.gaia;
+    if (state.gaia && $("gaiaCount")) {
+      $("gaiaCount").textContent = gaiaSources.length;
+    }
+    if ($("catalogLegend")) $("catalogLegend").hidden = !state.gaia && !state.wise;
+  }
+
+  function updateWiseUI() {
+    if ($("overlayWise")) $("overlayWise").checked = state.wise;
+    if ($("stageWise")) $("stageWise").classList.toggle("active-wise", state.wise);
+    if ($("wiseLegend")) $("wiseLegend").hidden = !state.wise;
+    if (state.wise && $("wiseCount")) {
+      $("wiseCount").textContent = wiseSources.length;
+    }
+    if ($("catalogLegend")) $("catalogLegend").hidden = !state.gaia && !state.wise;
+  }
+
+  async function loadCatalogs(force = false) {
+    if (state.ra == null) return;
+    const currentRa = state.ra, currentDec = state.dec, currentFov = state.fov;
+    const radius = Math.round(currentFov * 0.7);
+
+    if (state.gaia) {
+      const gaiaKey = `gaia:${currentRa.toFixed(4)}:${currentDec.toFixed(4)}:${radius}`;
+      if (!force && catalogCache.has(gaiaKey)) {
+        gaiaSources = catalogCache.get(gaiaKey);
+        updateGaiaUI();
+      } else {
+        if ($("gaiaLegend")) $("gaiaLegend").hidden = false;
+        if ($("gaiaCount")) $("gaiaCount").textContent = "…";
+        try {
+          const res = await getJson(`${API}/catalogs/gaia?ra=${currentRa}&dec=${currentDec}&radius=${radius}&limit=120`);
+          if (state.ra === currentRa && state.dec === currentDec) {
+            gaiaSources = res.sources || [];
+            catalogCache.set(gaiaKey, gaiaSources);
+            updateGaiaUI();
+          }
+        } catch {
+          if (state.ra === currentRa && state.dec === currentDec && $("gaiaCount")) {
+            $("gaiaCount").textContent = "err";
+          }
+        }
+      }
+    } else {
+      gaiaSources = [];
+      updateGaiaUI();
+    }
+
+    if (state.wise) {
+      const wiseKey = `wise:${currentRa.toFixed(4)}:${currentDec.toFixed(4)}:${radius}`;
+      if (!force && catalogCache.has(wiseKey)) {
+        wiseSources = catalogCache.get(wiseKey);
+        updateWiseUI();
+      } else {
+        if ($("wiseLegend")) $("wiseLegend").hidden = false;
+        if ($("wiseCount")) $("wiseCount").textContent = "…";
+        try {
+          const res = await getJson(`${API}/catalogs/wise?ra=${currentRa}&dec=${currentDec}&radius=${radius}&limit=120`);
+          if (state.ra === currentRa && state.dec === currentDec) {
+            wiseSources = res.sources || [];
+            catalogCache.set(wiseKey, wiseSources);
+            updateWiseUI();
+          }
+        } catch {
+          if (state.ra === currentRa && state.dec === currentDec && $("wiseCount")) {
+            $("wiseCount").textContent = "err";
+          }
+        }
+      }
+    } else {
+      wiseSources = [];
+      updateWiseUI();
+    }
+
+    drawOverlay();
+  }
+
   function paintControls() {
     $("ra").value = state.ra ?? ""; $("dec").value = state.dec ?? "";
     $("fov").value = state.fov; $("fovOut").textContent = state.fov + "″ (" + (state.fov / 60).toFixed(1) + "′)";
     $("stretch").value = state.stretch; $("invert").checked = state.invert;
     $("speed").value = state.speed; $("speedOut").textContent = state.speed + " ms";
     $("common").checked = state.common; $("cross").checked = state.cross;
+    updateGaiaUI();
+    updateWiseUI();
     const fine = state.band.startsWith("ch");
     $("useCh").checked = fine; $("chWrap").hidden = !fine;
     if (fine) {
@@ -245,6 +381,7 @@
   }
 
   function buildControls() {
+    if ($("randCoord")) $("randCoord").onclick = handleRandomCoordinates;
     TARGETS.forEach((t) => {
       const b = document.createElement("button");
       b.type = "button"; b.textContent = t.name; b.title = t.q;
@@ -280,6 +417,40 @@
     $("invert").onchange = () => { state.invert = $("invert").checked; reload(); };
     $("common").onchange = () => { state.common = $("common").checked; reload(); };
     $("cross").onchange = () => { state.cross = $("cross").checked; syncUrl(); drawOverlay(); };
+    if ($("overlayGaia")) {
+      $("overlayGaia").onchange = () => {
+        state.gaia = $("overlayGaia").checked;
+        syncUrl();
+        updateGaiaUI();
+        loadCatalogs();
+      };
+    }
+    if ($("overlayWise")) {
+      $("overlayWise").onchange = () => {
+        state.wise = $("overlayWise").checked;
+        syncUrl();
+        updateWiseUI();
+        loadCatalogs();
+      };
+    }
+    if ($("stageGaia")) {
+      $("stageGaia").onclick = (e) => {
+        e.stopPropagation();
+        state.gaia = !state.gaia;
+        syncUrl();
+        updateGaiaUI();
+        loadCatalogs();
+      };
+    }
+    if ($("stageWise")) {
+      $("stageWise").onclick = (e) => {
+        e.stopPropagation();
+        state.wise = !state.wise;
+        syncUrl();
+        updateWiseUI();
+        loadCatalogs();
+      };
+    }
     $("ref").onchange = () => { state.ref = +$("ref").value; reload(); };
     $("speed").oninput = () => { state.speed = +$("speed").value; paintControls(); syncUrl(); if (playing) play(); };
     $("apply").onclick = () => {
@@ -400,22 +571,86 @@
     stage.addEventListener("mousemove", (ev) => {
       const s = skyAt(ev);
       $("cursor").textContent = s ? `RA ${s.ra.toFixed(5)}°  Dec ${s.dec >= 0 ? "+" : ""}${s.dec.toFixed(5)}°` : "—";
-      if (!isMouseDown) return;
-      const dx = ev.clientX - mouseStartX;
-      const dy = ev.clientY - mouseStartY;
-      if (!mouseMoved && Math.hypot(dx, dy) > 5) {
-        mouseMoved = true;
-        abortSpectrum();
-        stage.style.cursor = "grabbing";
+      const tooltipEl = $("tooltip");
+
+      if (isMouseDown) {
+        if (tooltipEl) tooltipEl.hidden = true;
+        const dx = ev.clientX - mouseStartX;
+        const dy = ev.clientY - mouseStartY;
+        if (!mouseMoved && Math.hypot(dx, dy) > 5) {
+          mouseMoved = true;
+          abortSpectrum();
+          stage.style.cursor = "grabbing";
+        }
+        if (mouseMoved) {
+          panOffset.x = startPanX + dx;
+          panOffset.y = startPanY + dy;
+          applyVisualTransform();
+        }
+        return;
       }
-      if (mouseMoved) {
-        panOffset.x = startPanX + dx;
-        panOffset.y = startPanY + dy;
-        applyVisualTransform();
+
+      // Inspección de fuentes de Gaia y WISE con tooltip astrométrico
+      let hovered = null;
+      if (grid.size && (state.gaia || state.wise)) {
+        const r = stage.getBoundingClientRect();
+        const mx = ev.clientX - r.left;
+        const my = ev.clientY - r.top;
+        let bestDist = 13;
+
+        if (state.gaia && gaiaSources.length) {
+          for (const src of gaiaSources) {
+            const p = pixelOf(src.ra, src.dec);
+            const sx = p.x * r.width + panOffset.x;
+            const sy = p.y * r.height + panOffset.y;
+            const dist = Math.hypot(mx - sx, my - sy);
+            if (dist < bestDist) {
+              bestDist = dist;
+              hovered = { type: "gaia", source: src, x: sx, y: sy };
+            }
+          }
+        }
+        if (state.wise && wiseSources.length) {
+          for (const src of wiseSources) {
+            const p = pixelOf(src.ra, src.dec);
+            const sx = p.x * r.width + panOffset.x;
+            const sy = p.y * r.height + panOffset.y;
+            const dist = Math.hypot(mx - sx, my - sy);
+            if (dist < bestDist) {
+              bestDist = dist;
+              hovered = { type: "wise", source: src, x: sx, y: sy };
+            }
+          }
+        }
+      }
+
+      if (hovered && tooltipEl) {
+        tooltipEl.hidden = false;
+        tooltipEl.style.left = `${Math.min(stage.clientWidth - 260, Math.max(10, hovered.x + 12))}px`;
+        tooltipEl.style.top = `${Math.min(stage.clientHeight - 95, Math.max(20, hovered.y))}px`;
+        if (hovered.type === "gaia") {
+          const src = hovered.source;
+          tooltipEl.innerHTML = `<span style="color:#38bdf8;font-weight:600">✦ Gaia DR3</span> <span class="muted">${src.id.slice(-8)}</span><br>` +
+            `G: <b>${src.gmag != null ? src.gmag.toFixed(2) : "—"}</b> mag · BP−RP: <b>${src.bp_rp != null ? (src.bp_rp >= 0 ? "+" : "") + src.bp_rp.toFixed(2) : "—"}</b><br>` +
+            `PM: <b>${src.pm_total != null ? src.pm_total.toFixed(1) + " mas/a" : "—"}</b>` +
+            (src.pmra != null ? ` <span class="muted">(${src.pmra}, ${src.pmdec})</span>` : "") +
+            (src.parallax != null ? `<br>Paralaje: <b>${src.parallax.toFixed(2)} mas</b>` : "");
+        } else {
+          const src = hovered.source;
+          const redClass = src.w1_w2 != null && src.w1_w2 > 1.2 ? ` style="color:#ff4081;font-weight:bold"` : "";
+          tooltipEl.innerHTML = `<span style="color:#fb923c;font-weight:600">■ AllWISE</span> <span class="muted">${src.id}</span><br>` +
+            `W1 (3.4 µm): <b>${src.w1 != null ? src.w1.toFixed(2) : "—"}</b> mag<br>` +
+            `W2 (4.6 µm): <b>${src.w2 != null ? src.w2.toFixed(2) : "—"}</b> mag` +
+            (src.w1_w2 != null ? `<br><span${redClass}>W1−W2: <b>${src.w1_w2 >= 0 ? "+" : ""}${src.w1_w2.toFixed(2)}</b>${src.w1_w2 > 1.2 ? " ★ (candidato frío)" : ""}</span>` : "");
+        }
+      } else if (tooltipEl) {
+        tooltipEl.hidden = true;
       }
     });
 
     const finishMouseDrag = () => {
+      const tip = $("tooltip");
+      if (tip) tip.hidden = true;
       if (!isMouseDown) return;
       isMouseDown = false;
       stage.style.cursor = "crosshair";
@@ -667,6 +902,7 @@
     paintControls(); syncUrl();
     if (state.ra == null) return;
     const token = ++loadToken;
+    if (state.gaia || state.wise) loadCatalogs();
 
     if (!keepExisting) {
       panOffset = { x: 0, y: 0 };
@@ -938,6 +1174,114 @@
       const p = pixelOf(marker.ra, marker.dec);
       g.strokeStyle = "#7fd1b9"; g.lineWidth = 1.5;
       g.beginPath(); g.arc(p.x * w + panOffset.x, p.y * h + panOffset.y, 9, 0, 2 * Math.PI); g.stroke();
+    }
+
+    // Superposición Gaia DR3 (estrellas, magnitudes y vectores de movimiento propio)
+    if (state.gaia && gaiaSources.length && grid.size) {
+      const zoomRatio = (baseFov && state.fov) ? (baseFov / state.fov) : 1;
+      const arcsecPerPx = (grid.scale || 6.15) / zoomRatio;
+
+      for (const s of gaiaSources) {
+        const p = pixelOf(s.ra, s.dec);
+        const sx = p.x * w + panOffset.x;
+        const sy = p.y * h + panOffset.y;
+        if (sx < -30 || sx > w + 30 || sy < -30 || sy > h + 30) continue;
+
+        const gmag = s.gmag != null ? s.gmag : 15;
+        const rad = Math.max(2.5, Math.min(6, (17 - gmag) * 0.45 + 2.5));
+
+        // Marcador estelar de Gaia (anillo cian + punto astrométrico central)
+        g.strokeStyle = "#38bdf8";
+        g.lineWidth = 1.2;
+        g.beginPath();
+        g.arc(sx, sy, rad, 0, 2 * Math.PI);
+        g.stroke();
+        g.fillStyle = "#38bdf8";
+        g.fillRect(sx - 0.75, sy - 0.75, 1.5, 1.5);
+
+        // Vector de movimiento propio (PM)
+        if (s.pmra != null && s.pmdec != null) {
+          const pmTot = s.pm_total != null ? s.pm_total : Math.hypot(s.pmra, s.pmdec);
+          if (pmTot > 15) {
+            // Desplazamiento sobre línea temporal de 50 años
+            let vx = -(s.pmra * 50 / 1000) / arcsecPerPx; // Este hacia la izquierda (-x)
+            let vy = -(s.pmdec * 50 / 1000) / arcsecPerPx; // Norte hacia arriba (-y)
+            let vlen = Math.hypot(vx, vy);
+            if (vlen > 65) { vx = (vx / vlen) * 65; vy = (vy / vlen) * 65; vlen = 65; }
+            if (vlen < 6 && pmTot > 25) { vx = (vx / vlen) * 6; vy = (vy / vlen) * 6; vlen = 6; }
+
+            const isFast = pmTot > 120; // Estrella rápida / candidato Planeta X / enana marrón
+            g.strokeStyle = isFast ? "#f43f5e" : "rgba(56, 189, 248, 0.85)";
+            g.lineWidth = isFast ? 1.8 : 1.2;
+            g.beginPath();
+            g.moveTo(sx, sy);
+            g.lineTo(sx + vx, sy + vy);
+            g.stroke();
+
+            // Punta de flecha astrométrica
+            const ang = Math.atan2(vy, vx);
+            const head = isFast ? 5.5 : 4;
+            g.fillStyle = isFast ? "#f43f5e" : "rgba(56, 189, 248, 0.85)";
+            g.beginPath();
+            g.moveTo(sx + vx, sy + vy);
+            g.lineTo(sx + vx - head * Math.cos(ang - Math.PI / 6), sy + vy - head * Math.sin(ang - Math.PI / 6));
+            g.lineTo(sx + vx - head * Math.cos(ang + Math.PI / 6), sy + vy - head * Math.sin(ang + Math.PI / 6));
+            g.closePath();
+            g.fill();
+          }
+        }
+
+        // Etiqueta de magnitud G
+        if (s.gmag != null && (s.gmag < 15.0 || gaiaSources.length <= 25)) {
+          g.fillStyle = "rgba(56, 189, 248, 0.9)";
+          g.font = "9px ui-monospace, monospace";
+          g.textAlign = "left";
+          g.textBaseline = "middle";
+          g.fillText("G" + s.gmag.toFixed(1), sx + rad + 3, sy - 2);
+        }
+      }
+    }
+
+    // Superposición AllWISE (detecciones infrarrojas W1 3.4 µm, W2 4.6 µm, retículas)
+    if (state.wise && wiseSources.length && grid.size) {
+      for (const s of wiseSources) {
+        const p = pixelOf(s.ra, s.dec);
+        const sx = p.x * w + panOffset.x;
+        const sy = p.y * h + panOffset.y;
+        if (sx < -30 || sx > w + 30 || sy < -30 || sy > h + 30) continue;
+
+        const w1 = s.w1 != null ? s.w1 : 14;
+        const boxRad = Math.max(3.5, Math.min(7.5, (16 - w1) * 0.5 + 3.5));
+        const isUltraRed = s.w1_w2 != null && s.w1_w2 > 1.2; // Firma térmica de enana Y o Planeta X
+
+        g.strokeStyle = isUltraRed ? "#ff4081" : "#fb923c";
+        g.lineWidth = isUltraRed ? 1.8 : 1.3;
+
+        // Retícula cuadrada con mira de comparación infrarroja
+        g.strokeRect(sx - boxRad, sy - boxRad, boxRad * 2, boxRad * 2);
+        g.beginPath();
+        g.moveTo(sx - boxRad - 2, sy); g.lineTo(sx - boxRad, sy);
+        g.moveTo(sx + boxRad, sy); g.lineTo(sx + boxRad + 2, sy);
+        g.moveTo(sx, sy - boxRad - 2); g.lineTo(sx, sy - boxRad);
+        g.moveTo(sx, sy + boxRad); g.lineTo(sx, sy + boxRad + 2);
+        g.stroke();
+
+        // Etiquetas infrarrojas W1 / W2 / W1-W2
+        if (isUltraRed) {
+          g.fillStyle = "#ff4081";
+          g.font = "bold 9px ui-monospace, monospace";
+          g.textAlign = "left";
+          g.textBaseline = "middle";
+          g.fillText(`W1:${s.w1.toFixed(1)} W1-W2:+${s.w1_w2.toFixed(1)}★`, sx + boxRad + 3, sy + 2);
+        } else if (s.w1 != null && (s.w1 < 14.5 || wiseSources.length <= 25)) {
+          g.fillStyle = "rgba(251, 146, 60, 0.9)";
+          g.font = "9px ui-monospace, monospace";
+          g.textAlign = "left";
+          g.textBaseline = "middle";
+          const label = s.w2 != null ? `W1:${s.w1.toFixed(1)} W2:${s.w2.toFixed(1)}` : `W1:${s.w1.toFixed(1)}`;
+          g.fillText(label, sx + boxRad + 3, sy + 2);
+        }
+      }
     }
   }
 

@@ -19,6 +19,7 @@ import numpy as np
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 
+import catalogs
 import imaging
 import targets
 import upstream
@@ -226,6 +227,65 @@ def targets_search(q: str = Query(..., min_length=1, max_length=120)):
             results = [s] if s else []
             cache.set(key, json.dumps(results).encode(), 30 * 86400 if results else 3600)
     return JSONResponse({"query": q, "results": results}, headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/api/v1/targets/random")
+def targets_random(mode: str = Query("auto", pattern="^(auto|candidate|celestial)$")):
+    """Genera coordenadas aleatorias: de alto interés científico o de la esfera celeste."""
+    target = targets.random_target(mode)
+    return JSONResponse(target, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/v1/catalogs/gaia")
+def catalog_gaia(ra: float = RA, dec: float = DEC,
+                 radius: float = Query(180.0, ge=10.0, le=1800.0, description="Radio de búsqueda en segundos de arco"),
+                 limit: int = Query(120, ge=1, le=300, description="Máximo de fuentes")):
+    """Estrellas de Gaia DR3 en el campo de visión con magnitudes y vectores de movimiento propio."""
+    ra, dec = _r(ra, dec)
+    radius = round(radius, 1)
+    key = f"cat:gaia:{ra:.5f}:{dec:.5f}:{radius:.1f}:{limit}"
+    raw = cache.get(key)
+    if raw:
+        return Response(raw, media_type="application/json",
+                        headers={"Cache-Control": "public, max-age=86400", "X-Catalog-Source": "cache"})
+    try:
+        sources = catalogs.query_gaia(ra, dec, radius_arcsec=radius, limit=limit)
+    except Exception as e:
+        raise HTTPException(502, f"Error consultando catálogo Gaia DR3: {e}")
+
+    payload = json.dumps({
+        "ra": ra, "dec": dec, "radius_arcsec": radius, "catalog": "Gaia DR3 (I/355/gaiadr3)",
+        "count": len(sources), "sources": sources
+    }).encode()
+    cache.set(key, payload, 7 * 86400)
+    return Response(payload, media_type="application/json",
+                    headers={"Cache-Control": "public, max-age=86400", "X-Catalog-Source": "vizier"})
+
+
+@app.get("/api/v1/catalogs/wise")
+def catalog_wise(ra: float = RA, dec: float = DEC,
+                 radius: float = Query(180.0, ge=10.0, le=1800.0, description="Radio de búsqueda en segundos de arco"),
+                 limit: int = Query(120, ge=1, le=300, description="Máximo de fuentes")):
+    """Detecciones infrarrojas de AllWISE en el campo de visión (W1 3.4 µm, W2 4.6 µm, W3, W4)."""
+    ra, dec = _r(ra, dec)
+    radius = round(radius, 1)
+    key = f"cat:wise:{ra:.5f}:{dec:.5f}:{radius:.1f}:{limit}"
+    raw = cache.get(key)
+    if raw:
+        return Response(raw, media_type="application/json",
+                        headers={"Cache-Control": "public, max-age=86400", "X-Catalog-Source": "cache"})
+    try:
+        sources = catalogs.query_wise(ra, dec, radius_arcsec=radius, limit=limit)
+    except Exception as e:
+        raise HTTPException(502, f"Error consultando catálogo AllWISE: {e}")
+
+    payload = json.dumps({
+        "ra": ra, "dec": dec, "radius_arcsec": radius, "catalog": "AllWISE (II/328/allwise)",
+        "count": len(sources), "sources": sources
+    }).encode()
+    cache.set(key, payload, 7 * 86400)
+    return Response(payload, media_type="application/json",
+                    headers={"Cache-Control": "public, max-age=86400", "X-Catalog-Source": "vizier"})
 
 
 @app.get("/api/v1/observations")

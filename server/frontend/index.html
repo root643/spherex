@@ -24,7 +24,10 @@
 <main class="layout">
   <aside class="panel controls" aria-label="Controles">
     <section>
-      <h2>Objetivos de prueba</h2>
+      <div class="sec-header">
+        <h2>Objetivos de prueba</h2>
+        <button id="randCoord" type="button" class="btn-rand" title="Generar coordenadas aleatorias (alta cobertura SPHEREx o interés científico)">🎲 Aleatorio</button>
+      </div>
       <div id="targets" class="chips"></div>
     </section>
 
@@ -80,6 +83,22 @@
       <label class="check"><input id="cross" type="checkbox" checked> Retícula central</label>
     </section>
 
+    <section>
+      <h2>Superposición de telescopios</h2>
+      <label class="check">
+        <input id="overlayGaia" type="checkbox">
+        <span class="cat-pill cat-gaia"></span> Gaia DR3 (óptico · vectores PM)
+      </label>
+      <label class="check">
+        <input id="overlayWise" type="checkbox">
+        <span class="cat-pill cat-wise"></span> WISE (AllWISE · infrarrojo W1/W2)
+      </label>
+      <div id="catalogLegend" class="catalog-legend" hidden>
+        <span id="gaiaLegend" class="legend-badge gaia-badge" hidden>Gaia: <b id="gaiaCount">0</b></span>
+        <span id="wiseLegend" class="legend-badge wise-badge" hidden>WISE: <b id="wiseCount">0</b></span>
+      </div>
+    </section>
+
     <button id="apply" class="primary" type="button">Actualizar vista</button>
     <div class="row2">
       <button id="share" type="button">Copiar enlace</button>
@@ -94,9 +113,14 @@
         <button id="zoomIn" type="button" title="Acercar (+)">+</button>
         <button id="zoomOut" type="button" title="Alejar (−)">−</button>
       </div>
+      <div class="stage-overlays" aria-label="Capas externas">
+        <button id="stageGaia" type="button" class="btn-layer" title="Alternar superposición Gaia DR3 (óptico · vectores PM)">Gaia</button>
+        <button id="stageWise" type="button" class="btn-layer" title="Alternar superposición WISE (infrarrojo W1/W2)">WISE</button>
+      </div>
       <img id="img" alt="Fotograma SPHEREx" draggable="false">
       <canvas id="overlay"></canvas>
       <div class="compass" aria-hidden="true"><span>N</span><i></i><span class="e">E</span></div>
+      <div id="tooltip" class="astro-tooltip" hidden></div>
       <div id="msg" class="msg">Elige un objetivo o introduce coordenadas.</div>
     </div>
     <div class="transport">
@@ -130,6 +154,6 @@
   <span id="stats">caché: —</span>
   <span>Datos: NASA/JPL-Caltech · IPAC/IRSA · <a href="/api/docs">API</a></span>
 </footer>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>
