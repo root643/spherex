@@ -3,6 +3,7 @@
 *.key.txt
 *.pem
 id_rsa*
+aws_token
 
 __pycache__/
 *.pyc

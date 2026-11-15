@@ -11,6 +11,18 @@ id "$RUN_USER" >/dev/null 2>&1 || RUN_USER="$(id -un 1000 2>/dev/null || echo ro
 
 say() { printf '\n\033[1;33m== %s\033[0m\n' "$*"; }
 
+# Token del servicio de recortes de la caja AWS: vive en el fichero aws_token (no
+# va al repositorio). Se genera la primera vez y se reutiliza en reinstalaciones.
+TOKEN_FILE="$SRC/aws_token"
+if [ -s "$TOKEN_FILE" ]; then
+  AWS_TOKEN=$(head -n 1 "$TOKEN_FILE")
+else
+  AWS_TOKEN=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+  echo "$AWS_TOKEN" > "$TOKEN_FILE"
+  chmod 600 "$TOKEN_FILE"
+  echo "  token de la caja AWS generado en $TOKEN_FILE"
+fi
+
 [ "$(id -u)" -eq 0 ] || { echo "Ejecuta con sudo."; exit 1; }
 command -v apt-get >/dev/null || { echo "Este instalador necesita apt (Ubuntu/Debian)."; exit 1; }
 
@@ -94,7 +106,7 @@ User=${RUN_USER}
 WorkingDirectory=/opt/spherex-backend
 Environment=SPHEREX_FITS_DIR=/var/cache/spherex/fits
 Environment=SPHEREX_REDIS_URL=redis://127.0.0.1:6379/0
-Environment=SPHEREX_AWS_CUTOUT=http://127.0.0.1:9600/cutout?token=c480514b2b7586660ba94229243253c7
+Environment=SPHEREX_AWS_CUTOUT=http://127.0.0.1:9600/cutout?token=${AWS_TOKEN}
 ExecStart=/opt/spherex-env/bin/uvicorn main:app --workers ${WORKERS} --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=3
