@@ -37,9 +37,24 @@
         <label>RA (°)<input id="ra" type="number" step="any" min="0" max="360"></label>
         <label>Dec (°)<input id="dec" type="number" step="any" min="-90" max="90"></label>
       </div>
-      <label>Campo de visión <output id="fovOut"></output>
-        <input id="fov" type="range" min="60" max="1800" step="30">
-      </label>
+      <div class="row2 fov-row">
+        <label>Campo de visión exacto (″)
+          <input id="fovExact" type="number" min="10" max="3600" step="any" placeholder="300">
+        </label>
+        <label>Equivalente
+          <output id="fovOut" class="mono fov-equiv">—</output>
+        </label>
+      </div>
+      <input id="fov" type="range" min="30" max="1800" step="1" title="Ajuste fino de campo de visión">
+      <div id="fovPresets" class="chips fov-presets" style="margin-top: 6px;" aria-label="Ajustes estándar de FOV">
+        <button type="button" data-fov="60">1′</button>
+        <button type="button" data-fov="120">2′</button>
+        <button type="button" data-fov="240">4′</button>
+        <button type="button" data-fov="300">5′</button>
+        <button type="button" data-fov="600">10′</button>
+        <button type="button" data-fov="900">15′</button>
+        <button type="button" data-fov="1800">30′</button>
+      </div>
     </section>
 
     <section>
@@ -154,6 +169,6 @@
   <span id="stats">caché: —</span>
   <span>Datos: NASA/JPL-Caltech · IPAC/IRSA · <a href="/api/docs">API</a></span>
 </footer>
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>

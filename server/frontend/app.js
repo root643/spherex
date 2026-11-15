@@ -93,11 +93,12 @@
     clearTimeout(clickTimer);
     abortSpectrum();
     const step = state.fov < 300 ? 30 : (state.fov < 900 ? 60 : 120);
-    const nextFov = Math.max(60, Math.min(1800, state.fov + delta * step));
+    const nextFov = Math.max(30, Math.min(1800, state.fov + delta * step));
     if (nextFov !== state.fov) {
       state.fov = nextFov;
-      $("fov").value = state.fov;
-      $("fovOut").textContent = state.fov + "″ (" + (state.fov / 60).toFixed(1) + "′)";
+      if ($("fovExact")) $("fovExact").value = state.fov;
+      $("fov").value = Math.min(1800, Math.max(30, state.fov));
+      $("fovOut").textContent = state.fov + "″ (" + (state.fov / 60).toFixed(2) + "′)";
       syncUrl();
       applyVisualTransform();
       clearTimeout(zoomDebounceTimer);
@@ -387,7 +388,12 @@
 
   function paintControls() {
     $("ra").value = state.ra ?? ""; $("dec").value = state.dec ?? "";
-    $("fov").value = state.fov; $("fovOut").textContent = state.fov + "″ (" + (state.fov / 60).toFixed(1) + "′)";
+    if ($("fovExact")) $("fovExact").value = state.fov;
+    $("fov").value = Math.min(1800, Math.max(30, state.fov));
+    $("fovOut").textContent = `${state.fov}″ (${(state.fov / 60).toFixed(2)}′)`;
+    if ($("fovPresets")) {
+      [...$("fovPresets").children].forEach((b) => b.setAttribute("aria-pressed", String(Math.abs(+b.dataset.fov - state.fov) < 1e-2)));
+    }
     $("stretch").value = state.stretch; $("invert").checked = state.invert;
     $("speed").value = state.speed; $("speedOut").textContent = state.speed + " ms";
     $("common").checked = state.common; $("cross").checked = state.cross;
@@ -427,7 +433,8 @@
     [...$("modes").children].forEach((b) => (b.onclick = () => { state.mode = b.dataset.mode; reload(); }));
     $("fov").oninput = () => {
       state.fov = +$("fov").value;
-      paintControls();
+      if ($("fovExact")) $("fovExact").value = state.fov;
+      $("fovOut").textContent = `${state.fov}″ (${(state.fov / 60).toFixed(2)}′)`;
       syncUrl();
       applyVisualZoom(baseFov / state.fov);
     };
@@ -435,6 +442,40 @@
       clearTimeout(zoomDebounceTimer);
       reload({ zoomOnly: true });
     };
+    if ($("fovExact")) {
+      const applyExactFov = (reloadNow) => {
+        const v = parseFloat($("fovExact").value);
+        if (!isNaN(v) && v >= 10 && v <= 3600) {
+          state.fov = Math.round(v * 100) / 100;
+          $("fov").value = Math.min(1800, Math.max(30, state.fov));
+          $("fovOut").textContent = `${state.fov}″ (${(state.fov / 60).toFixed(2)}′)`;
+          syncUrl();
+          applyVisualZoom(baseFov / state.fov);
+          if (reloadNow) {
+            clearTimeout(zoomDebounceTimer);
+            reload({ zoomOnly: true });
+          }
+        }
+      };
+      $("fovExact").oninput = () => applyExactFov(false);
+      $("fovExact").onchange = () => applyExactFov(true);
+      $("fovExact").onkeydown = (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          $("fovExact").blur();
+          applyExactFov(true);
+        }
+      };
+    }
+    if ($("fovPresets")) {
+      [...$("fovPresets").children].forEach((b) => {
+        b.onclick = () => {
+          state.fov = +b.dataset.fov;
+          paintControls();
+          reload({ zoomOnly: true });
+        };
+      });
+    }
     $("useCh").onchange = () => {
       const det = detOf(state.band);
       state.band = $("useCh").checked ? "ch" + ((det - 1) * 17 + 9) : "D" + det;
@@ -486,6 +527,10 @@
       let ra = parseFloat($("ra").value), dec = parseFloat($("dec").value);
       if (isNaN(ra) || isNaN(dec) || !(ra >= 0 && ra <= 360 && dec >= -90 && dec <= 90)) return setMsg("Coordenadas no válidas (RA 0–360°, Dec ±90°).", true);
       if (ra >= 360) ra = 0;
+      if ($("fovExact")) {
+        const f = parseFloat($("fovExact").value);
+        if (!isNaN(f) && f >= 10 && f <= 3600) state.fov = Math.round(f * 100) / 100;
+      }
       state.ra = ra; state.dec = dec; marker = null; reload();
     };
     $("share").onclick = async () => {
@@ -1168,7 +1213,9 @@
     $("img").src = f.url;
     $("scrub").value = idx;
     $("frameLabel").textContent = `${idx + 1}/${frames.length} · ${f.label}`;
-    $("frameMeta").textContent = `${f.meta.n} exposiciones` + (f.meta.wl ? ` · λ≈${(+f.meta.wl).toFixed(2)} µm` : "") + ` · ${f.meta.scale}″/px`;
+    const fovExactSec = (f.meta.size * f.meta.scale).toFixed(1);
+    const fovExactMin = (fovExactSec / 60).toFixed(2);
+    $("frameMeta").textContent = `${f.meta.n} exp · FOV exacto: ${fovExactSec}″ (${fovExactMin}′)` + (f.meta.wl ? ` · λ≈${(+f.meta.wl).toFixed(2)} µm` : "") + ` · ${f.meta.scale}″/px`;
     [...$("epochs").children].forEach((li) => li.classList.toggle("on", +li.dataset.epoch === f.epoch));
     drawOverlay();
   }

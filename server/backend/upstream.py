@@ -614,9 +614,11 @@ def load_cutout(uri: str, ra: float, dec: float, size_deg: float, need_var: bool
 # --------------------------------------------------------------------------- rejilla comun
 def grid_for(fov_arcsec: float, max_pixels: int = 512, min_scale: float | None = None) -> tuple[int, float]:
     """(N, escala arcsec/px). Por defecto 2x sobremuestreo de la escala nativa, limitado a max_pixels.
-    Con min_scale mayor (p. ej. la escala nativa) sale la version de baja resolucion."""
-    scale = max(min_scale if min_scale is not None else NATIVE_SCALE / 2.0, fov_arcsec / max_pixels)
-    n = max(8, int(np.ceil(fov_arcsec / scale)))
+    Con min_scale mayor (p. ej. la escala nativa) sale la version de baja resolucion.
+    Garantiza que n * scale == fov_arcsec exactamente."""
+    target_scale = max(min_scale if min_scale is not None else NATIVE_SCALE / 2.0, fov_arcsec / max_pixels)
+    n = max(8, int(np.round(fov_arcsec / target_scale)))
+    scale = fov_arcsec / float(n)
     return n, scale
 
 

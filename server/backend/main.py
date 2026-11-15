@@ -311,7 +311,7 @@ def cutout_frame(ra: float = RA, dec: float = DEC, fov: float = FOV,
     """Fotograma de una epoca (o diferencia epoca - ref), reproyectado y estirado, en WebP.
     res=low saca la version de baja resolucion (rejilla nativa) para vista rapida."""
     ra, dec = _r(ra, dec)
-    fov = float(round(fov))
+    fov = round(float(fov), 2)
     det, lmin, lmax = _band(band)
     exps = get_exposures(ra, dec)
     arr, meta = build_array(ra, dec, fov, det, lmin, lmax, _epoch_exps(exps, epoch), "median",
@@ -331,7 +331,7 @@ def cutout_coadd(ra: float = RA, dec: float = DEC, fov: float = FOV, band: str =
                  vmin: Optional[float] = None, vmax: Optional[float] = None):
     """Coadicion temporal de todas las epocas."""
     ra, dec = _r(ra, dec)
-    fov = float(round(fov))
+    fov = round(float(fov), 2)
     det, lmin, lmax = _band(band)
     arr, meta = build_array(ra, dec, fov, det, lmin, lmax, get_exposures(ra, dec), method,
                             MAX_PER_COADD, res)
@@ -349,7 +349,7 @@ def cutout_gif(ra: float = RA, dec: float = DEC, fov: float = FOV, band: str = Q
     """Genera al vuelo una animacion GIF de las epocas de esa posicion (blink o diferencia).
     Ultra-rapido: recupera los arrays de Redis y compone el GIF en milisegundos."""
     ra, dec = _r(ra, dec)
-    fov = float(round(fov))
+    fov = round(float(fov), 2)
     det, lmin, lmax = _band(band)
     exps = get_exposures(ra, dec)
     usable_epochs = sorted({e["epoch"] for e in exps if e["detector"] == det})
@@ -438,7 +438,7 @@ def cutout_prewarm(background_tasks: BackgroundTasks, ra: float = RA, dec: float
                    fov: float = FOV, band: str = Query("D4")):
     """Encola la construccion de epocas en segundo plano de forma dosificada y no invasiva."""
     ra, dec = _r(ra, dec)
-    fov = float(round(fov))
+    fov = round(float(fov), 2)
 
     with _prewarm_lock:
         if len(_prewarming) >= MAX_PREWARM_PENDING:
