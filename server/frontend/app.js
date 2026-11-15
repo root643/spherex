@@ -33,6 +33,33 @@
   let idx = 0, timer = null, playing = true, loadToken = 0;
   let grid = { size: 0, scale: 0 };  // rejilla del fotograma actual (px, arcsec/px)
   let marker = null;        // {ra, dec} del ultimo clic
+  let baseFov = state.fov;  // FOV de los fotogramas cargados en el visor
+  let zoomDebounceTimer = null;
+
+  function applyVisualZoom(ratio) {
+    const img = $("img");
+    if (!img) return;
+    if (!ratio || Math.abs(ratio - 1) < 0.005) {
+      img.style.transform = "none";
+    } else {
+      img.style.transform = `scale(${ratio.toFixed(4)})`;
+    }
+    drawOverlay();
+  }
+
+  function changeZoom(delta) {
+    const step = state.fov < 300 ? 30 : (state.fov < 900 ? 60 : 120);
+    const nextFov = Math.max(60, Math.min(1800, state.fov + delta * step));
+    if (nextFov !== state.fov) {
+      state.fov = nextFov;
+      $("fov").value = state.fov;
+      $("fovOut").textContent = state.fov + "″ (" + (state.fov / 60).toFixed(1) + "′)";
+      syncUrl();
+      applyVisualZoom(baseFov / state.fov);
+      clearTimeout(zoomDebounceTimer);
+      zoomDebounceTimer = setTimeout(() => reload({ zoomOnly: true }), 260);
+    }
+  }
 
   function syncUrl() {
     const q = new URLSearchParams();
@@ -92,8 +119,16 @@
       $("bands").appendChild(b);
     }
     [...$("modes").children].forEach((b) => (b.onclick = () => { state.mode = b.dataset.mode; reload(); }));
-    $("fov").oninput = () => { state.fov = +$("fov").value; paintControls(); };
-    $("fov").onchange = reload;
+    $("fov").oninput = () => {
+      state.fov = +$("fov").value;
+      paintControls();
+      syncUrl();
+      applyVisualZoom(baseFov / state.fov);
+    };
+    $("fov").onchange = () => {
+      clearTimeout(zoomDebounceTimer);
+      reload({ zoomOnly: true });
+    };
     $("useCh").onchange = () => {
       const det = detOf(state.band);
       state.band = $("useCh").checked ? "ch" + ((det - 1) * 17 + 9) : "D" + det;
@@ -139,6 +174,8 @@
       if (ev.code === "Space") { ev.preventDefault(); playing ? pause() : play(); }
       if (ev.code === "ArrowLeft") { pause(); show(idx - 1); }
       if (ev.code === "ArrowRight") { pause(); show(idx + 1); }
+      if (ev.key === "+" || ev.key === "=") { ev.preventDefault(); changeZoom(-1); }
+      if (ev.key === "-" || ev.key === "_") { ev.preventDefault(); changeZoom(1); }
     });
     const stage = $("stage");
     stage.addEventListener("mousemove", (ev) => {
@@ -158,20 +195,40 @@
       if (!s) return;
       state.ra = +s.ra.toFixed(5); state.dec = +s.dec.toFixed(5); marker = null; reload();
     });
-    let wheelTimer = null;
     stage.addEventListener("wheel", (ev) => {
       ev.preventDefault();
-      const delta = Math.sign(ev.deltaY);
-      const step = state.fov < 300 ? 30 : (state.fov < 900 ? 60 : 120);
-      const nextFov = Math.max(60, Math.min(1800, state.fov + delta * step));
-      if (nextFov !== state.fov) {
-        state.fov = nextFov;
-        $("fov").value = state.fov;
-        $("fovOut").textContent = state.fov + "″ (" + (state.fov / 60).toFixed(1) + "′)";
-        clearTimeout(wheelTimer);
-        wheelTimer = setTimeout(reload, 180);
-      }
+      changeZoom(Math.sign(ev.deltaY));
     }, { passive: false });
+
+    let touchDist0 = null, touchFov0 = null;
+    stage.addEventListener("touchstart", (ev) => {
+      if (ev.touches.length === 2) {
+        touchDist0 = Math.hypot(ev.touches[0].clientX - ev.touches[1].clientX, ev.touches[0].clientY - ev.touches[1].clientY);
+        touchFov0 = state.fov;
+      }
+    }, { passive: true });
+    stage.addEventListener("touchmove", (ev) => {
+      if (ev.touches.length === 2 && touchDist0) {
+        const dist = Math.hypot(ev.touches[0].clientX - ev.touches[1].clientX, ev.touches[0].clientY - ev.touches[1].clientY);
+        if (dist > 10) {
+          const factor = touchDist0 / dist;
+          const nextFov = Math.max(60, Math.min(1800, Math.round((touchFov0 * factor) / 30) * 30));
+          if (nextFov !== state.fov) {
+            state.fov = nextFov;
+            $("fov").value = state.fov;
+            $("fovOut").textContent = state.fov + "″ (" + (state.fov / 60).toFixed(1) + "′)";
+            applyVisualZoom(baseFov / state.fov);
+          }
+        }
+      }
+    }, { passive: true });
+    stage.addEventListener("touchend", (ev) => {
+      if (touchDist0 && ev.touches.length < 2) {
+        touchDist0 = null;
+        clearTimeout(zoomDebounceTimer);
+        zoomDebounceTimer = setTimeout(() => reload({ zoomOnly: true }), 260);
+      }
+    }, { passive: true });
     new ResizeObserver(drawOverlay).observe(stage);
   }
 
@@ -211,24 +268,36 @@
   }
 
   // ------------------------------------------------------------------ carga principal
-  async function reload() {
+  async function reload(opts = {}) {
+    const isZoomOnly = Boolean(opts && opts.zoomOnly && frames.length);
     cancelPrefetch();
     paintControls(); syncUrl();
     if (state.ra == null) return;
     const token = ++loadToken;
-    pause(true);
-    frames.forEach((f) => URL.revokeObjectURL(f.url));
-    frames = []; $("img").removeAttribute("src"); $("frameLabel").textContent = ""; $("frameMeta").textContent = "";
-    setMsg("Consultando el archivo de SPHEREx en IRSA…");
+
+    if (!isZoomOnly) {
+      baseFov = state.fov;
+      applyVisualZoom(1);
+      pause(true);
+      frames.forEach((f) => URL.revokeObjectURL(f.url));
+      frames = []; $("img").removeAttribute("src"); $("frameLabel").textContent = ""; $("frameMeta").textContent = "";
+      setMsg("Consultando el archivo de SPHEREx en IRSA…");
+    } else {
+      setMsg("Ajustando nitidez astrométrica…");
+    }
+
     try {
-      const obs = await getJson(`${API}/observations?ra=${state.ra}&dec=${state.dec}`);
-      if (token !== loadToken) return;
-      epochs = obs.epochs;
+      if (!isZoomOnly || !epochs || !epochs.length) {
+        const obs = await getJson(`${API}/observations?ra=${state.ra}&dec=${state.dec}`);
+        if (token !== loadToken) return;
+        epochs = obs.epochs;
+        const det = "D" + detOf(state.band);
+        [...$("bands").children].forEach((b) => (b.disabled = !(obs.detectors["D" + b.dataset.det] > 0)));
+      }
       const det = "D" + detOf(state.band);
-      [...$("bands").children].forEach((b) => (b.disabled = !(obs.detectors["D" + b.dataset.det] > 0)));
       const usable = epochs.filter((e) => e.detectors[det] > 0);
       paintEpochs(det);
-      if (!usable.length) return setMsg(obs.n_exposures ? `Sin imágenes en ${det} para esta posición. Prueba otro detector.` : "SPHEREx aún no tiene imágenes públicas de esta posición.", true);
+      if (!usable.length) return setMsg(`Sin imágenes en ${det} para esta posición. Prueba otro detector.`, true);
 
       let jobs;
       if (state.mode === "coadd") {
@@ -246,10 +315,10 @@
 
       // ---- carga progresiva: primero baja resolucion (se ensena segun llega),
       // ---- despues alta resolucion en segundo plano reemplazando cada fotograma
-      let done = 0, failed = 0, showing = false;
+      let done = 0, failed = 0, showing = isZoomOnly;
       const progress = () => setMsg(done < jobs.length - failed
         ? `Épocas listas: ${done}/${jobs.length - failed} (la primera vez tarda; después va desde caché)` : "");
-      progress();
+      if (!isZoomOnly) progress();
 
       const byIdx = new Map();   // indice del job -> fotograma
       const rebuild = () => {
@@ -284,12 +353,33 @@
       };
 
       // fase 1: baja resolucion (carga rapida para respuesta inmediata)
+      const newByIdx = new Map();
+      let newFailed = 0;
       await mapLimit(jobs, 4, async (j, i) => {
         try {
-          applyFrame(i, await fetchFrame(frameUrl(j.kind, { ...j.extra, res: "low" })));
-        } catch (e) { applyFrame(i, { error: e }); }
+          const f = await fetchFrame(frameUrl(j.kind, { ...j.extra, res: "low" }));
+          newByIdx.set(i, f);
+          if (!isZoomOnly) {
+            applyFrame(i, f);
+          }
+        } catch (e) {
+          if (!isZoomOnly) applyFrame(i, { error: e }); else newFailed++;
+        }
       });
       if (token !== loadToken) return;
+
+      if (isZoomOnly) {
+        const oldFrames = frames;
+        byIdx.clear();
+        newByIdx.forEach((v, k) => byIdx.set(k, v));
+        failed = newFailed;
+        rebuild();
+        baseFov = state.fov;
+        applyVisualZoom(1);
+        if (frames.length) show(Math.min(idx, frames.length - 1));
+        oldFrames.forEach((f) => { if (f.url) URL.revokeObjectURL(f.url); });
+      }
+
       const validJobs = [...byIdx.entries()].sort((a, b) => a[0] - b[0]).map(([k, f]) => ({ idx0: k, f, job: jobs[k] }));
       if (!validJobs.length) return setMsg("Sin datos válidos en esta banda para esta posición.", true);
       setMsg(failed ? `${failed} época(s) sin datos válidos.` : "");
@@ -405,7 +495,9 @@
   function skyAt(ev) {
     if (!grid.size || state.ra == null) return null;
     const r = $("stage").getBoundingClientRect();
-    const fx = (ev.clientX - r.left) / r.width - 0.5, fy = (ev.clientY - r.top) / r.height - 0.5;
+    const zoomRatio = (baseFov && state.fov) ? (baseFov / state.fov) : 1;
+    const fx = ((ev.clientX - r.left) / r.width - 0.5) / zoomRatio;
+    const fy = ((ev.clientY - r.top) / r.height - 0.5) / zoomRatio;
     const span = grid.size * grid.scale / 3600 * D2R;       // ancho total en radianes
     const xi = -fx * span, eta = -fy * span;                // este a la izquierda, norte arriba
     const rho = Math.hypot(xi, eta), d0 = state.dec * D2R;
@@ -420,7 +512,8 @@
     const cosc = Math.sin(d0) * Math.sin(d) + Math.cos(d0) * Math.cos(d) * Math.cos(a);
     const xi = Math.cos(d) * Math.sin(a) / cosc, eta = (Math.cos(d0) * Math.sin(d) - Math.sin(d0) * Math.cos(d) * Math.cos(a)) / cosc;
     const span = grid.size * grid.scale / 3600 * D2R;
-    return { x: 0.5 - xi / span, y: 0.5 - eta / span };
+    const zoomRatio = (baseFov && state.fov) ? (baseFov / state.fov) : 1;
+    return { x: 0.5 - (xi / span) * zoomRatio, y: 0.5 - (eta / span) * zoomRatio };
   }
   function drawOverlay() {
     const c = $("overlay"), r = $("stage").getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
