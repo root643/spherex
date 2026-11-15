@@ -86,6 +86,7 @@
 
   <section class="viewer" aria-label="Visor">
     <div id="stage" class="stage">
+      <div id="viewerBuffer" class="buffer-wrap"><div class="buffer-fill"></div></div>
       <img id="img" alt="Fotograma SPHEREx" draggable="false">
       <canvas id="overlay"></canvas>
       <div class="compass" aria-hidden="true"><span>N</span><i></i><span class="e">E</span></div>
@@ -108,7 +109,10 @@
   <aside class="panel sed" aria-label="Espectro">
     <h2>Espectro de 102 canales</h2>
     <p id="sedInfo" class="muted">Haz clic sobre un objeto de la imagen.</p>
-    <canvas id="chart"></canvas>
+    <div class="chart-box">
+      <div id="chartBuffer" class="buffer-wrap"><div class="buffer-fill"></div></div>
+      <canvas id="chart"></canvas>
+    </div>
     <dl id="diag" class="diag"></dl>
     <h2>Épocas</h2>
     <ol id="epochs" class="epochs"></ol>
@@ -119,6 +123,6 @@
   <span id="stats">caché: —</span>
   <span>Datos: NASA/JPL-Caltech · IPAC/IRSA · <a href="/api/docs">API</a></span>
 </footer>
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

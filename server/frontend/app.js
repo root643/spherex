@@ -79,6 +79,107 @@
     return [lo + k * s, lo + (k + 1) * s];
   }
 
+  // ------------------------------------------------------------------ buffer loader psicologico con ETA
+  function createBufferLoader(wrapEl, textEl) {
+    const fillEl = wrapEl ? wrapEl.querySelector(".buffer-fill") : null;
+    let startTime = 0;
+    let baseText = "";
+    let raf = null;
+    let finished = true;
+    let currentPct = 0;
+
+    function frame(now) {
+      if (finished) return;
+      const elapsed = now - startTime;
+
+      // Curva psicologica:
+      // 0 a 160ms: salta de 0% a 68% (arranque explosivo: percepcion de velocidad inmediata)
+      // 160 a 550ms: sube suavemente de 68% a 84%
+      // 550ms+: se frena asintoticamente (crawling) hacia el 92% mientras el servidor entrega los bytes
+      if (elapsed < 160) {
+        currentPct = (elapsed / 160) * 68;
+      } else if (elapsed < 550) {
+        currentPct = 68 + ((elapsed - 160) / 390) * 16;
+      } else {
+        const extra = 8 * (1 - Math.exp(-(elapsed - 550) / 900));
+        currentPct = 84 + extra;
+      }
+
+      if (fillEl) fillEl.style.width = `${currentPct.toFixed(1)}%`;
+
+      // ETA psicologico dinamico
+      let eta = "";
+      if (currentPct < 65) {
+        eta = "~0.5s";
+      } else if (currentPct < 80) {
+        eta = "~0.2s";
+      } else {
+        eta = "~0.1s";
+      }
+
+      if (textEl && !finished) {
+        textEl.innerHTML = `${baseText} <span class="buffer-eta mono">[${Math.round(currentPct)}% · ${eta}]</span>`;
+      }
+
+      raf = requestAnimationFrame(frame);
+    }
+
+    return {
+      start(label) {
+        finished = false;
+        currentPct = 0;
+        baseText = label || "";
+        startTime = performance.now();
+        if (fillEl) {
+          fillEl.className = "buffer-fill";
+          fillEl.style.width = "0%";
+        }
+        if (wrapEl) wrapEl.classList.add("active");
+        if (textEl) textEl.classList.remove("err");
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(frame);
+      },
+      step(pct, label) {
+        if (finished) return;
+        if (label) baseText = label;
+        if (pct > currentPct) currentPct = pct;
+        if (fillEl) fillEl.style.width = `${currentPct.toFixed(1)}%`;
+      },
+      done(finalLabel) {
+        finished = true;
+        cancelAnimationFrame(raf);
+        if (fillEl) {
+          fillEl.style.width = "100%";
+          fillEl.classList.add("done");
+        }
+        if (textEl && finalLabel !== undefined) {
+          textEl.textContent = finalLabel;
+        }
+        setTimeout(() => {
+          if (wrapEl) wrapEl.classList.remove("active");
+          setTimeout(() => {
+            if (finished && fillEl) fillEl.style.width = "0%";
+          }, 300);
+        }, 220);
+      },
+      fail(errLabel) {
+        finished = true;
+        cancelAnimationFrame(raf);
+        if (fillEl) fillEl.classList.add("err");
+        if (textEl && errLabel !== undefined) {
+          textEl.textContent = errLabel;
+          textEl.classList.add("err");
+        }
+        setTimeout(() => {
+          if (wrapEl) wrapEl.classList.remove("active");
+        }, 600);
+      }
+    };
+  }
+
+  let viewerLoader = null;
+  let chartLoader = null;
+
   // ------------------------------------------------------------------ controles
   function setMsg(text, err) { const m = $("msg"); m.textContent = text || ""; m.classList.toggle("err", !!err); }
 
@@ -281,9 +382,9 @@
       pause(true);
       frames.forEach((f) => URL.revokeObjectURL(f.url));
       frames = []; $("img").removeAttribute("src"); $("frameLabel").textContent = ""; $("frameMeta").textContent = "";
-      setMsg("Consultando el archivo de SPHEREx en IRSA…");
+      if (viewerLoader) viewerLoader.start("Consultando archivo SPHEREx…");
     } else {
-      setMsg("Ajustando nitidez astrométrica…");
+      if (viewerLoader) viewerLoader.start("Ajustando nitidez astrométrica…");
     }
 
     try {
@@ -378,11 +479,16 @@
         applyVisualZoom(1);
         if (frames.length) show(Math.min(idx, frames.length - 1));
         oldFrames.forEach((f) => { if (f.url) URL.revokeObjectURL(f.url); });
+        if (viewerLoader) viewerLoader.done("");
+      } else {
+        if (viewerLoader) viewerLoader.step(82, "Fotogramas listos · Maximizando resolución…");
       }
 
       const validJobs = [...byIdx.entries()].sort((a, b) => a[0] - b[0]).map(([k, f]) => ({ idx0: k, f, job: jobs[k] }));
-      if (!validJobs.length) return setMsg("Sin datos válidos en esta banda para esta posición.", true);
-      setMsg(failed ? `${failed} época(s) sin datos válidos.` : "");
+      if (!validJobs.length) {
+        if (viewerLoader) viewerLoader.fail("Sin datos válidos en esta banda para esta posición.");
+        return;
+      }
 
       // escala de grises comun para todas las epocas (se aplica al pedir la alta resolucion)
       let lim = {};
@@ -400,11 +506,16 @@
         // Solo tras completar la alta resolucion y si el usuario sigue en la misma vista,
         // se programa el precalentamiento especulativo dosificado
         if (token === loadToken) {
+          if (!isZoomOnly && viewerLoader) {
+            viewerLoader.done(failed ? `${failed} época(s) sin datos válidos.` : "");
+          }
           schedulePrefetch(state.ra, state.dec, state.fov, det);
         }
       });
     } catch (e) {
-      if (token === loadToken) setMsg(e.message, true);
+      if (token === loadToken) {
+        if (viewerLoader) viewerLoader.fail(e.message); else setMsg(e.message, true);
+      }
     }
   }
 
@@ -536,16 +647,38 @@
 
   // ------------------------------------------------------------------ espectro
   async function loadSpectrum(ra, dec) {
-    $("sedInfo").textContent = `Midiendo los 102 canales en ${ra.toFixed(5)}°, ${dec.toFixed(5)}°… (puede tardar la primera vez)`;
+    if (chartLoader) chartLoader.start(`Midiendo 102 canales en ${ra.toFixed(4)}°, ${dec.toFixed(4)}°`);
+    drawChartLoading(`Midiendo 102 canales en ${ra.toFixed(4)}°, ${dec.toFixed(4)}°…`);
     $("diag").textContent = "";
     try {
       const s = await getJson(`${API}/spectrum?ra=${ra.toFixed(5)}&dec=${dec.toFixed(5)}`);
-      $("sedInfo").textContent = `${s.n_exposures} exposiciones · apertura r = ${s.aperture_radius_px} px · ${ra.toFixed(5)}°, ${dec.toFixed(5)}°`;
+      if (chartLoader) chartLoader.done(`${s.n_exposures} exposiciones · apertura r = ${s.aperture_radius_px} px · ${ra.toFixed(5)}°, ${dec.toFixed(5)}°`);
       drawChart(s);
       const fmt = (v) => (v == null ? "sin datos" : (v * 100).toFixed(1) + " %");
       $("diag").innerHTML = `<dt>Hielo de agua (3,05 µm)</dt><dd>${fmt(s.diagnostics["h2o_ice_3.05um_depth"])}</dd>` +
         `<dt>CO₂ (4,27 µm)</dt><dd>${fmt(s.diagnostics["co2_4.27um_depth"])}</dd>`;
-    } catch (e) { $("sedInfo").textContent = e.message; }
+    } catch (e) {
+      if (chartLoader) chartLoader.fail(e.message); else $("sedInfo").textContent = e.message;
+    }
+  }
+
+  function drawChartLoading(msg) {
+    const c = $("chart"), g = c.getContext("2d"), dpr = window.devicePixelRatio || 1;
+    const W = Math.max(280, c.clientWidth), H = Math.round(W * 0.7);
+    c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const L = 50, R = 10, T = 14, B = 34, x0 = 0.75, x1 = 5.0;
+    g.clearRect(0, 0, W, H);
+    const X = (v) => L + (v - x0) / (x1 - x0) * (W - L - R);
+    for (let d = 1; d <= 6; d++) {
+      g.fillStyle = d % 2 ? "rgba(255,255,255,.03)" : "rgba(255,255,255,0)";
+      g.fillRect(X(DET[d][0]), T, X(DET[d][1]) - X(DET[d][0]), H - T - B);
+      g.fillStyle = DET_COLOR[d - 1]; g.font = "10px ui-monospace, monospace"; g.textAlign = "center";
+      g.fillText("D" + d, (X(DET[d][0]) + X(DET[d][1])) / 2, T + 10);
+    }
+    g.strokeStyle = "#252b33"; g.lineWidth = 1;
+    g.strokeRect(L, T, W - L - R, H - T - B);
+    g.fillStyle = "#8a94a1"; g.font = "12px system-ui, sans-serif"; g.textAlign = "center";
+    g.fillText(msg || "Extrayendo fotometría de 102 canales…", (L + W - R) / 2, (T + H - B) / 2);
   }
   function drawChart(s) {
     const c = $("chart"), g = c.getContext("2d"), dpr = window.devicePixelRatio || 1;
@@ -609,6 +742,8 @@
     } catch { $("stats").textContent = "caché: sin conexión con la API"; }
   }
 
+  viewerLoader = createBufferLoader($("viewerBuffer"), $("msg"));
+  chartLoader = createBufferLoader($("chartBuffer"), $("sedInfo"));
   buildControls(); paintControls();
   if (state.ra == null) { Object.assign(state, { ra: TARGETS[0].ra, dec: TARGETS[0].dec, fov: TARGETS[0].fov, band: TARGETS[0].band }); }
   reload(); stats(); setInterval(stats, 20000);
