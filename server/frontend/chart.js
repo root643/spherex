@@ -47,7 +47,7 @@
     g.save(); g.beginPath(); g.rect(L, T, W - L - R, H - T - B); g.clip();
     s.points.forEach((p) => { g.fillStyle = DET_COLOR[p.detector - 1] + "55"; g.fillRect(X(p.wavelength) - 1, Y(p.flux_ujy) - 1, 2, 2); });
     // medianas por canal
-    g.strokeStyle = "#ffb454"; g.lineWidth = 1.5; g.beginPath();
+    g.strokeStyle = "#5ec8f2"; g.lineWidth = 1.5; g.beginPath();
     ch.forEach((p, i) => (i ? g.lineTo(X(p.wavelength), Y(p.flux_ujy)) : g.moveTo(X(p.wavelength), Y(p.flux_ujy))));
     g.stroke();
     ch.forEach((p) => { g.fillStyle = DET_COLOR[p.detector - 1]; g.beginPath(); g.arc(X(p.wavelength), Y(p.flux_ujy), 2.2, 0, 2 * Math.PI); g.fill(); });

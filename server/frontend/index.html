@@ -27,13 +27,13 @@
 
 <main class="layout">
   <aside class="panel controls" aria-label="Controles">
-    <section>
-      <div class="sec-header">
+    <details class="fold" data-fold="targets" open>
+      <summary>
         <h2>Objetivos de prueba</h2>
         <button id="randCoord" type="button" class="btn-rand" title="Generar coordenadas aleatorias (alta cobertura SPHEREx o interés científico)">🎲 Aleatorio</button>
-      </div>
+      </summary>
       <div id="targets" class="chips"></div>
-    </section>
+    </details>
 
     <section>
       <h2>Posición</h2>
@@ -42,7 +42,7 @@
         <label>Dec (°)<input id="dec" type="number" step="any" min="-90" max="90"></label>
       </div>
       <div class="row2 fov-row">
-        <label>Campo de visión exacto (″)
+        <label>Campo de visión (″)
           <input id="fovExact" type="number" min="10" max="3600" step="any" placeholder="300">
         </label>
         <label>Equivalente
@@ -82,8 +82,8 @@
       </label>
     </section>
 
-    <section>
-      <h2>Imagen</h2>
+    <details class="fold" data-fold="image" open>
+      <summary><h2>Imagen</h2></summary>
       <div class="row2">
         <label>Estirado
           <select id="stretch">
@@ -100,7 +100,7 @@
       <label class="check"><input id="invert" type="checkbox"> Invertir (negativo)</label>
       <label class="check"><input id="common" type="checkbox" checked> Misma escala en todas las épocas</label>
       <label class="check"><input id="cross" type="checkbox" checked> Retícula central</label>
-    </section>
+    </details>
 
     <section>
       <h2>Superposición de telescopios</h2>
@@ -166,8 +166,10 @@
     </div>
     <dl id="diag" class="diag"></dl>
     <button id="pubFromSed" class="publish-btn" type="button" hidden>Publicar este objeto en el foro</button>
-    <h2>Épocas</h2>
-    <ol id="epochs" class="epochs"></ol>
+    <details class="fold" data-fold="epochs" open>
+      <summary><h2>Épocas</h2><span id="epochCount" class="fold-note mono"></span></summary>
+      <ol id="epochs" class="epochs"></ol>
+    </details>
   </aside>
 </main>
 

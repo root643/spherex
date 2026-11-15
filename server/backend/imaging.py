@@ -246,7 +246,7 @@ def render_gif(frames_data: list[tuple[np.ndarray, dict]],
         if cross:
             cx, cy, a, b = w / 2, h / 2, max(4, w // 60), max(11, w // 22)
             for x1, y1, x2, y2 in ((-b, 0, -a, 0), (a, 0, b, 0), (0, -b, 0, -a), (0, a, 0, b)):
-                draw.line((cx + x1, cy + y1, cx + x2, cy + y2), fill=(255, 180, 84), width=max(1, w // 400))
+                draw.line((cx + x1, cy + y1, cx + x2, cy + y2), fill=(94, 200, 242), width=max(1, w // 400))
         if marker is not None:
             mx, my, r = marker[0] * w, marker[1] * h, max(6, w // 45)
             if -r <= mx <= w + r and -r <= my <= h + r:
@@ -257,7 +257,7 @@ def render_gif(frames_data: list[tuple[np.ndarray, dict]],
             pad = 8 if not scale_to else max(8, w // 50)
             if date_str:
                 draw.text((pad + 1, pad + 1), date_str, fill=(0, 0, 0), font=font)
-                draw.text((pad, pad), date_str, fill=(255, 180, 84), font=font)
+                draw.text((pad, pad), date_str, fill=(94, 200, 242), font=font)
 
             sub = str(meta.get("label_sub", "SPHEREx"))
             if sub:

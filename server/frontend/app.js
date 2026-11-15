@@ -657,7 +657,7 @@
       if (item.type === "gaia") {
         const src = item.source;
         const isFast = src.pm_total != null && src.pm_total > 120;
-        tooltipEl.innerHTML = `<span style="color:#38bdf8;font-weight:600">✦ Gaia DR3</span> <span class="muted">${src.id.slice(-8)}</span><br>` +
+        tooltipEl.innerHTML = `<span style="color:#c084fc;font-weight:600">✦ Gaia DR3</span> <span class="muted">${src.id.slice(-8)}</span><br>` +
           `G: <b>${src.gmag != null ? src.gmag.toFixed(2) : "—"}</b> mag · BP−RP: <b>${src.bp_rp != null ? (src.bp_rp >= 0 ? "+" : "") + src.bp_rp.toFixed(2) : "—"}</b><br>` +
           `PM: <b${isFast ? ' style="color:#f43f5e"' : ''}>${src.pm_total != null ? src.pm_total.toFixed(1) + " mas/a" + (isFast ? " ★ (rápida)" : "") : "—"}</b>` +
           (src.pmra != null ? ` <span class="muted">(${src.pmra}, ${src.pmdec})</span>` : "") +
@@ -1214,6 +1214,8 @@
 
   function paintEpochs(det) {
     const ol = $("epochs"); ol.textContent = "";
+    const nUse = epochs.filter((e) => (e.detectors[det] || 0) > 0).length;
+    if ($("epochCount")) $("epochCount").textContent = `${nUse}/${epochs.length} con imágenes`;
     epochs.forEach((e) => {
       const li = document.createElement("li");
       const n = e.detectors[det] || 0;
@@ -1288,7 +1290,7 @@
     const g = c.getContext("2d"); g.scale(dpr, dpr);
     const w = r.width, h = r.height;
     if (state.cross && frames.length) {
-      g.strokeStyle = "rgba(255,180,84,.85)"; g.lineWidth = 1;
+      g.strokeStyle = "rgba(94,200,242,.9)"; g.lineWidth = 1;
       const cx = w / 2, cy = h / 2, a = 8, b = 22;
       g.beginPath();
       [[-b, 0, -a, 0], [a, 0, b, 0], [0, -b, 0, -a], [0, a, 0, b]].forEach(([x1, y1, x2, y2]) => { g.moveTo(cx + x1, cy + y1); g.lineTo(cx + x2, cy + y2); });
@@ -1314,12 +1316,12 @@
         const isFast = pmTot != null && pmTot > 120; // Estrella rápida / candidato Planeta X / enana marrón
 
         // Marcador estelar de Gaia (anillo cian/rosa + punto astrométrico central)
-        g.strokeStyle = isFast ? "#f43f5e" : "#38bdf8";
+        g.strokeStyle = isFast ? "#f43f5e" : "#c084fc";
         g.lineWidth = isFast ? 1.6 : 1.2;
         g.beginPath();
         g.arc(sx, sy, rad, 0, 2 * Math.PI);
         g.stroke();
-        g.fillStyle = isFast ? "#f43f5e" : "#38bdf8";
+        g.fillStyle = isFast ? "#f43f5e" : "#c084fc";
         g.fillRect(sx - 0.75, sy - 0.75, 1.5, 1.5);
 
         // Vector de movimiento propio (PM) proyectado exactamente en la proyección TAN
@@ -1337,7 +1339,7 @@
           if (vlen > 70) { vx = (vx / vlen) * 70; vy = (vy / vlen) * 70; vlen = 70; }
           if (vlen < 7 && pmTot > 25) { vx = (vx / vlen) * 7; vy = (vy / vlen) * 7; vlen = 7; }
 
-          g.strokeStyle = isFast ? "#f43f5e" : "rgba(56, 189, 248, 0.9)";
+          g.strokeStyle = isFast ? "#f43f5e" : "rgba(192, 132, 252, 0.9)";
           g.lineWidth = isFast ? 2.0 : 1.3;
           g.beginPath();
           g.moveTo(sx, sy);
@@ -1347,7 +1349,7 @@
           // Punta de flecha astrométrica orientada hacia la dirección de avance
           const ang = Math.atan2(vy, vx);
           const head = isFast ? 6 : 4.5;
-          g.fillStyle = isFast ? "#f43f5e" : "rgba(56, 189, 248, 0.9)";
+          g.fillStyle = isFast ? "#f43f5e" : "rgba(192, 132, 252, 0.9)";
           g.beginPath();
           g.moveTo(sx + vx, sy + vy);
           g.lineTo(sx + vx - head * Math.cos(ang - Math.PI / 6), sy + vy - head * Math.sin(ang - Math.PI / 6));
@@ -1365,7 +1367,7 @@
           const gText = s.gmag != null ? `G${s.gmag.toFixed(1)} ` : "";
           g.fillText(`${gText}PM:${pmTot.toFixed(0)}★`, sx + rad + 3, sy - 2);
         } else if (s.gmag != null && (s.gmag < 15.0 || gaiaSources.length <= 30)) {
-          g.fillStyle = "rgba(56, 189, 248, 0.9)";
+          g.fillStyle = "rgba(192, 132, 252, 0.9)";
           g.font = "9px ui-monospace, monospace";
           g.textAlign = "left";
           g.textBaseline = "middle";
@@ -1612,6 +1614,14 @@
   buildControls(); paintControls();
   if (state.ra == null) { Object.assign(state, { ra: TARGETS[0].ra, dec: TARGETS[0].dec, fov: TARGETS[0].fov, band: TARGETS[0].band }); }
   setupPublish();
+  // secciones plegables: se recuerda si cada una estaba abierta o cerrada
+  document.querySelectorAll("details.fold").forEach((d) => {
+    const key = "spherex.fold." + d.dataset.fold;
+    try { const v = localStorage.getItem(key); if (v != null) d.open = v === "1"; } catch { /* sin almacenamiento */ }
+    d.addEventListener("toggle", () => { try { localStorage.setItem(key, d.open ? "1" : "0"); } catch { /* idem */ } });
+  });
+  // el boton Aleatorio vive en la cabecera plegable: que no la pliegue al pulsarlo
+  $("randCoord").addEventListener("click", (ev) => ev.preventDefault());
   // enlaces desde el foro: ?mra=&mdec= marca el objeto y mide su espectro; ?publish=1 abre el formulario
   const startMarker = P.has("mra") && P.has("mdec") ? { ra: num("mra", NaN), dec: num("mdec", NaN) } : null;
   const startPublish = P.get("publish") === "1";
