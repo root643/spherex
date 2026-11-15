@@ -61,6 +61,8 @@ def _query_vizier_tsv(params: dict[str, str], timeout: float = 8.0) -> list[dict
                         row = {col: (parts[i] if i < len(parts) else "") for i, col in enumerate(cols)}
                         data_rows.append(row)
                 return data_rows
+            else:
+                last_err = RuntimeError(f"HTTP {r.status_code} desde {mirror}: {r.text[:80]}")
         except Exception as e:
             last_err = e
             continue
@@ -129,7 +131,7 @@ def query_wise(ra: float, dec: float, radius_arcsec: float = 180.0, limit: int =
         "-c.u": "arcsec",
         "-out": "AllWISE,RAJ2000,DEJ2000,W1mag,W2mag,W3mag,W4mag,pmRA,pmDE",
         "-out.max": str(limit),
-        "-sort": "W1mag",
+        "-sort": "_r",
     }
     rows = _query_vizier_tsv(params)
     sources = []

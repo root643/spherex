@@ -68,7 +68,7 @@ _SESAME = "https://cds.unistra.fr/cgi-bin/nph-sesame/-oI/SNV?{}"
 
 def random_celestial() -> dict:
     """Genera coordenadas isotropicas aleatorias en la esfera celeste (distribucion cos Dec)."""
-    ra = round(random.uniform(0.0, 360.0), 4)
+    ra = round(random.uniform(0.0, 359.9999), 4)
     u = random.uniform(-1.0, 1.0)
     dec = round(math.degrees(math.asin(u)), 4)
     band = f"D{random.randint(1, 6)}"
@@ -98,9 +98,6 @@ def random_target(mode: str = "auto") -> dict:
         target["source"] = "scientific_interest"
         return target
     return random_celestial()
-
-_COORD = re.compile(r"^\s*([+-]?\d+(?:\.\d+)?)\s*[, ]\s*([+-]?\d+(?:\.\d+)?)\s*$")
-_SESAME = "https://cds.unistra.fr/cgi-bin/nph-sesame/-oI/SNV?{}"
 
 
 def _norm(s: str) -> str:

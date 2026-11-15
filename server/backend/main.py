@@ -43,12 +43,13 @@ pool = ThreadPoolExecutor(max_workers=int(os.environ.get("SPHEREX_FETCH_THREADS"
 prewarm_pool = ThreadPoolExecutor(max_workers=int(os.environ.get("SPHEREX_PREWARM_THREADS", "1")),
                                   thread_name_prefix="prewarm_worker")
 
-RA = Query(..., ge=0, lt=360, description="Ascension recta J2000 (grados)")
+RA = Query(..., ge=0, le=360, description="Ascension recta J2000 (grados)")
 DEC = Query(..., ge=-90, le=90, description="Declinacion J2000 (grados)")
 FOV = Query(300, ge=60, le=1800, description="Campo de vision (segundos de arco)")
 
 
 def _r(ra: float, dec: float) -> tuple[float, float]:
+    ra = ra % 360.0
     return round(ra, 5), round(dec, 5)
 
 
@@ -239,7 +240,7 @@ def targets_random(mode: str = Query("auto", pattern="^(auto|candidate|celestial
 @app.get("/api/v1/catalogs/gaia")
 def catalog_gaia(ra: float = RA, dec: float = DEC,
                  radius: float = Query(180.0, ge=10.0, le=1800.0, description="Radio de búsqueda en segundos de arco"),
-                 limit: int = Query(120, ge=1, le=300, description="Máximo de fuentes")):
+                 limit: int = Query(150, ge=1, le=300, description="Máximo de fuentes")):
     """Estrellas de Gaia DR3 en el campo de visión con magnitudes y vectores de movimiento propio."""
     ra, dec = _r(ra, dec)
     radius = round(radius, 1)
@@ -265,7 +266,7 @@ def catalog_gaia(ra: float = RA, dec: float = DEC,
 @app.get("/api/v1/catalogs/wise")
 def catalog_wise(ra: float = RA, dec: float = DEC,
                  radius: float = Query(180.0, ge=10.0, le=1800.0, description="Radio de búsqueda en segundos de arco"),
-                 limit: int = Query(120, ge=1, le=300, description="Máximo de fuentes")):
+                 limit: int = Query(150, ge=1, le=300, description="Máximo de fuentes")):
     """Detecciones infrarrojas de AllWISE en el campo de visión (W1 3.4 µm, W2 4.6 µm, W3, W4)."""
     ra, dec = _r(ra, dec)
     radius = round(radius, 1)

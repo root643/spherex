@@ -89,6 +89,26 @@ class TestCatalogsParsing(unittest.TestCase):
         if w.get("w1") is not None and w.get("w2") is not None:
             self.assertAlmostEqual(w["w1_w2"], round(w["w1"] - w["w2"], 3), delta=1e-3)
 
+    def test_query_wise_finds_cold_target(self):
+        """Comprueba que la ordenacion por distancia de AllWISE devuelva WISE 0855 (candidato frio W1-W2 > 1.2) en la posicion principal."""
+        sources = catalogs.query_wise(133.7951, -7.2451, radius_arcsec=60, limit=5)
+        self.assertGreater(len(sources), 0)
+        top = sources[0]
+        self.assertIn("085510", top["id"])
+        self.assertIsNotNone(top["w1_w2"])
+        self.assertGreater(top["w1_w2"], 1.2)
+
+    def test_vizier_error_handling(self):
+        """Comprueba que un error upstream HTTP 503 en los espejos lance RuntimeError en vez de fallar silenciosamente retornando lista vacia."""
+        from unittest.mock import patch, Mock
+        mock_resp = Mock()
+        mock_resp.status_code = 503
+        mock_resp.text = "Service Unavailable"
+        with patch.object(catalogs._session, "get", return_value=mock_resp):
+            with self.assertRaises(RuntimeError) as ctx:
+                catalogs._query_vizier_tsv({"-source": "I/355/gaiadr3", "-c": "0 0"})
+            self.assertIn("503", str(ctx.exception))
+
 
 class TestApiEndpoints(unittest.TestCase):
     @classmethod
@@ -140,7 +160,12 @@ class TestApiEndpoints(unittest.TestCase):
         r = self.client.get("/api/v1/catalogs/gaia?ra=0&dec=0&radius=10&limit=1")
         self.assertEqual(r.status_code, 200)
 
-        # Parametro invalido (RA >= 360)
+        # RA = 360 es equivalente a RA = 0 (debe ser normalizado a 0.0 y responder 200)
+        r_360 = self.client.get("/api/v1/catalogs/gaia?ra=360.0&dec=0&radius=10&limit=1")
+        self.assertEqual(r_360.status_code, 200)
+        self.assertEqual(r_360.json()["ra"], 0.0)
+
+        # Parametro fuera de rango fisico (RA > 360 o Dec > 90)
         r_bad = self.client.get("/api/v1/catalogs/gaia?ra=400&dec=0")
         self.assertEqual(r_bad.status_code, 422)
 
