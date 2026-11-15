@@ -35,16 +35,41 @@
   let marker = null;        // {ra, dec} del ultimo clic
   let baseFov = state.fov;  // FOV de los fotogramas cargados en el visor
   let zoomDebounceTimer = null;
+  let panOffset = { x: 0, y: 0 };
 
-  function applyVisualZoom(ratio) {
+  function applyVisualTransform() {
     const img = $("img");
     if (!img) return;
-    if (!ratio || Math.abs(ratio - 1) < 0.005) {
+    const zoomRatio = (baseFov && state.fov) ? (baseFov / state.fov) : 1;
+    const hasPan = Math.abs(panOffset.x) > 0.5 || Math.abs(panOffset.y) > 0.5;
+    const hasZoom = Math.abs(zoomRatio - 1) >= 0.005;
+
+    if (!hasPan && !hasZoom) {
       img.style.transform = "none";
+    } else if (hasPan && hasZoom) {
+      img.style.transform = `translate(${panOffset.x.toFixed(1)}px, ${panOffset.y.toFixed(1)}px) scale(${zoomRatio.toFixed(4)})`;
+    } else if (hasPan) {
+      img.style.transform = `translate(${panOffset.x.toFixed(1)}px, ${panOffset.y.toFixed(1)}px)`;
     } else {
-      img.style.transform = `scale(${ratio.toFixed(4)})`;
+      img.style.transform = `scale(${zoomRatio.toFixed(4)})`;
     }
     drawOverlay();
+  }
+
+  function applyVisualZoom(ratio) {
+    applyVisualTransform();
+  }
+
+  function animateRecenter(targetTx, targetTy) {
+    const img = $("img");
+    if (!img) return;
+    img.classList.add("panning");
+    panOffset.x = targetTx;
+    panOffset.y = targetTy;
+    applyVisualTransform();
+    setTimeout(() => {
+      img.classList.remove("panning");
+    }, 290);
   }
 
   function changeZoom(delta) {
@@ -55,7 +80,7 @@
       $("fov").value = state.fov;
       $("fovOut").textContent = state.fov + "″ (" + (state.fov / 60).toFixed(1) + "′)";
       syncUrl();
-      applyVisualZoom(baseFov / state.fov);
+      applyVisualTransform();
       clearTimeout(zoomDebounceTimer);
       zoomDebounceTimer = setTimeout(() => reload({ zoomOnly: true }), 260);
     }
@@ -294,7 +319,24 @@
       clearTimeout(clickTimer);
       const s = skyAt(ev);
       if (!s) return;
-      state.ra = +s.ra.toFixed(5); state.dec = +s.dec.toFixed(5); marker = null; reload();
+      const r = stage.getBoundingClientRect();
+      const clickX = ev.clientX - r.left;
+      const clickY = ev.clientY - r.top;
+      const targetTx = r.width / 2 - clickX;
+      const targetTy = r.height / 2 - clickY;
+
+      // 1. Actualizar coordenadas y marcador sobre la estrella seleccionada
+      state.ra = +s.ra.toFixed(5);
+      state.dec = +s.dec.toFixed(5);
+      marker = s;
+      paintControls();
+      syncUrl();
+
+      // 2. Transicion visual instantanea y suave (deslizamiento al centro de 280ms)
+      animateRecenter(targetTx, targetTy);
+
+      // 3. Cargar el fotograma astrometrico real centrado sin pantalla negra
+      reload({ recenterOnly: true });
     });
     stage.addEventListener("wheel", (ev) => {
       ev.preventDefault();
@@ -371,20 +413,23 @@
   // ------------------------------------------------------------------ carga principal
   async function reload(opts = {}) {
     const isZoomOnly = Boolean(opts && opts.zoomOnly && frames.length);
+    const isRecenterOnly = Boolean(opts && opts.recenterOnly && frames.length);
+    const keepExisting = isZoomOnly || isRecenterOnly;
     cancelPrefetch();
     paintControls(); syncUrl();
     if (state.ra == null) return;
     const token = ++loadToken;
 
-    if (!isZoomOnly) {
+    if (!keepExisting) {
+      panOffset = { x: 0, y: 0 };
       baseFov = state.fov;
-      applyVisualZoom(1);
+      applyVisualTransform();
       pause(true);
       frames.forEach((f) => URL.revokeObjectURL(f.url));
       frames = []; $("img").removeAttribute("src"); $("frameLabel").textContent = ""; $("frameMeta").textContent = "";
       if (viewerLoader) viewerLoader.start("Consultando archivo SPHEREx…");
     } else {
-      if (viewerLoader) viewerLoader.start("Ajustando nitidez astrométrica…");
+      if (viewerLoader) viewerLoader.start(isRecenterOnly ? "Centrando en nuevas coordenadas…" : "Ajustando nitidez astrométrica…");
     }
 
     try {
@@ -416,10 +461,10 @@
 
       // ---- carga progresiva: primero baja resolucion (se ensena segun llega),
       // ---- despues alta resolucion en segundo plano reemplazando cada fotograma
-      let done = 0, failed = 0, showing = isZoomOnly;
+      let done = 0, failed = 0, showing = keepExisting;
       const progress = () => setMsg(done < jobs.length - failed
         ? `Épocas listas: ${done}/${jobs.length - failed} (la primera vez tarda; después va desde caché)` : "");
-      if (!isZoomOnly) progress();
+      if (!keepExisting) progress();
 
       const byIdx = new Map();   // indice del job -> fotograma
       const rebuild = () => {
@@ -460,23 +505,24 @@
         try {
           const f = await fetchFrame(frameUrl(j.kind, { ...j.extra, res: "low" }));
           newByIdx.set(i, f);
-          if (!isZoomOnly) {
+          if (!keepExisting) {
             applyFrame(i, f);
           }
         } catch (e) {
-          if (!isZoomOnly) applyFrame(i, { error: e }); else newFailed++;
+          if (!keepExisting) applyFrame(i, { error: e }); else newFailed++;
         }
       });
       if (token !== loadToken) return;
 
-      if (isZoomOnly) {
+      if (keepExisting) {
         const oldFrames = frames;
         byIdx.clear();
         newByIdx.forEach((v, k) => byIdx.set(k, v));
         failed = newFailed;
         rebuild();
+        panOffset = { x: 0, y: 0 };
         baseFov = state.fov;
-        applyVisualZoom(1);
+        applyVisualTransform();
         if (frames.length) show(Math.min(idx, frames.length - 1));
         oldFrames.forEach((f) => { if (f.url) URL.revokeObjectURL(f.url); });
         if (viewerLoader) viewerLoader.done("");
@@ -506,7 +552,7 @@
         // Solo tras completar la alta resolucion y si el usuario sigue en la misma vista,
         // se programa el precalentamiento especulativo dosificado
         if (token === loadToken) {
-          if (!isZoomOnly && viewerLoader) {
+          if (!keepExisting && viewerLoader) {
             viewerLoader.done(failed ? `${failed} época(s) sin datos válidos.` : "");
           }
           schedulePrefetch(state.ra, state.dec, state.fov, det);
@@ -607,8 +653,8 @@
     if (!grid.size || state.ra == null) return null;
     const r = $("stage").getBoundingClientRect();
     const zoomRatio = (baseFov && state.fov) ? (baseFov / state.fov) : 1;
-    const fx = ((ev.clientX - r.left) / r.width - 0.5) / zoomRatio;
-    const fy = ((ev.clientY - r.top) / r.height - 0.5) / zoomRatio;
+    const fx = ((ev.clientX - r.left - panOffset.x) / r.width - 0.5) / zoomRatio;
+    const fy = ((ev.clientY - r.top - panOffset.y) / r.height - 0.5) / zoomRatio;
     const span = grid.size * grid.scale / 3600 * D2R;       // ancho total en radianes
     const xi = -fx * span, eta = -fy * span;                // este a la izquierda, norte arriba
     const rho = Math.hypot(xi, eta), d0 = state.dec * D2R;
@@ -641,7 +687,7 @@
     if (marker && grid.size) {
       const p = pixelOf(marker.ra, marker.dec);
       g.strokeStyle = "#7fd1b9"; g.lineWidth = 1.5;
-      g.beginPath(); g.arc(p.x * w, p.y * h, 9, 0, 2 * Math.PI); g.stroke();
+      g.beginPath(); g.arc(p.x * w + panOffset.x, p.y * h + panOffset.y, 9, 0, 2 * Math.PI); g.stroke();
     }
   }
 
