@@ -158,7 +158,7 @@ label output { color: var(--text); font-family: var(--mono); float: right; }
 .nav { display: flex; gap: 2px; background: #0e1216; border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
 .nav a { color: var(--muted); text-decoration: none; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; }
 .nav a:hover { color: var(--text); }
-.nav a[aria-current=page] { background: #222932; color: var(--text); }
+.nav a[aria-current=page] { background: #222932; color: var(--accent); font-weight: 600; }
 .publish-btn { display: block; width: 100%; margin-top: 6px; padding: 7px 10px; border-radius: 6px; text-align: center; font-weight: 600;
   background: rgba(var(--accent-rgb), .1); color: var(--accent); border: 1px solid rgba(var(--accent-rgb), .45); text-decoration: none; cursor: pointer; }
 .publish-btn:hover { background: rgba(var(--accent-rgb), .18); border-color: var(--accent); }
@@ -227,7 +227,7 @@ textarea { font: inherit; color: var(--text); background: #0e1216; border: 1px s
 .vote button:hover { background: #1b2128; color: var(--text); }
 .vote .score { font-weight: 700; font-size: 14px; }
 .vote.voted-up .up, .vote.voted-up .score { color: var(--accent); }
-.vote.voted-down .down, .vote.voted-down .score { color: #7aa2f7; }
+.vote.voted-down .down, .vote.voted-down .score { color: #ff8a80; }
 .vote.disabled button { visibility: hidden; }
 .post-main { padding: 12px 14px 10px; min-width: 0; }
 .post-title { margin: 0; font-size: 16.5px; font-weight: 600; line-height: 1.3; }
