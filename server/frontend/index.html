@@ -6,7 +6,7 @@
 <title>SPHEREx Blink · visor temporal de 102 bandas</title>
 <meta name="description" content="Visor tipo WiseView para las imágenes de NASA SPHEREx: parpadeo entre épocas, diferencia, coadición y espectro de 102 canales.">
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css?v=20">
+<link rel="stylesheet" href="style.css?v=21">
 </head>
 <body>
 <header class="top">
@@ -205,7 +205,7 @@
   <span>Datos: NASA/JPL-Caltech · IPAC/IRSA · <a href="/api/docs">API</a></span>
 </footer>
 <dialog id="pubDlg" class="pub-dlg" aria-labelledby="pubHead">
-  <form id="pubForm" novalidate>
+  <form id="pubForm" action="javascript:void(0);" onsubmit="return false;" novalidate>
     <header class="pub-head">
       <h2 id="pubHead">Publicar hallazgo en el foro</h2>
       <button type="button" id="pubClose" class="pub-x" aria-label="Cerrar">×</button>
@@ -244,13 +244,13 @@
         <p id="pubMsg" class="pub-msg" role="status" aria-live="polite"></p>
         <div class="pub-actions">
           <button type="button" id="pubCancel">Cancelar</button>
-          <button type="submit" id="pubSend" class="primary">Publicar</button>
+          <button type="button" id="pubSend" class="primary">Publicar</button>
         </div>
       </div>
     </div>
   </form>
 </dialog>
-<script src="chart.js?v=3"></script>
-<script src="app.js?v=18"></script>
+<script src="chart.js?v=4"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>

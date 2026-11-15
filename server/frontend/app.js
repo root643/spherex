@@ -1590,7 +1590,7 @@
     $("pubTitle").focus();
   }
   async function sendPublish(ev) {
-    ev.preventDefault();
+    if (ev && ev.preventDefault) ev.preventDefault();
     const title = $("pubTitle").value.trim();
     const msg = $("pubMsg");
     if (title.length < 4) { msg.textContent = "Ponle un título de al menos 4 caracteres."; msg.classList.add("err"); $("pubTitle").focus(); return; }
@@ -1613,25 +1613,50 @@
       if (!r.ok) throw new Error(await errText(r));
       const out = await r.json();
       const owned = store.get("spherex.owned", {});
-      owned[out.id] = out.owner_token;
-      store.set("spherex.owned", owned);
-      store.set("spherex.author", payload.author);
+      const safeOwned = (owned && typeof owned === "object" && !Array.isArray(owned)) ? owned : {};
+      safeOwned[out.id] = out.owner_token;
+      store.set("spherex.owned", safeOwned);
+      if (payload.author) store.set("spherex.author", payload.author);
       msg.textContent = "¡Publicado! Abriendo el foro…";
-      location.href = `/forum.html#p/${out.id}`;
+      setTimeout(() => {
+        location.href = `/forum.html#p/${out.id}`;
+      }, 350);
     } catch (e) {
-      msg.textContent = e.message; msg.classList.add("err");
+      msg.textContent = (e && e.message) ? e.message : "Error al publicar"; msg.classList.add("err");
       $("pubSend").disabled = false; $("pubSend").textContent = "Publicar";
     }
   }
   function setupPublish() {
-    $("publish").onclick = () => openPublish(true);
-    $("pubFromSed").onclick = () => openPublish(true);
-    $("pubForm").onsubmit = sendPublish;
-    $("pubCancel").onclick = $("pubClose").onclick = () => $("pubDlg").close();
-    $("pubTarget").oninput = () => { $("pubTarget").dataset.auto = "0"; };
-    $("pubDlg").addEventListener("close", () => { clearInterval(pubTimer); pubTimer = null; });
-    // clic en el fondo oscuro: cerrar
-    $("pubDlg").addEventListener("click", (ev) => { if (ev.target === $("pubDlg")) $("pubDlg").close(); });
+    if ($("publish")) $("publish").onclick = () => openPublish(true);
+    if ($("pubFromSed")) $("pubFromSed").onclick = () => openPublish(true);
+    if ($("pubSend")) {
+      $("pubSend").onclick = (ev) => {
+        if (ev && ev.preventDefault) ev.preventDefault();
+        sendPublish(ev);
+      };
+    }
+    if ($("pubForm")) {
+      $("pubForm").onsubmit = (ev) => {
+        if (ev && ev.preventDefault) ev.preventDefault();
+        sendPublish(ev);
+      };
+    }
+    const closePub = () => { try { $("pubDlg").close(); } catch {} };
+    if ($("pubCancel")) $("pubCancel").onclick = closePub;
+    if ($("pubClose")) $("pubClose").onclick = closePub;
+    if ($("pubTarget")) $("pubTarget").oninput = () => { $("pubTarget").dataset.auto = "0"; };
+    if ($("pubTitle")) {
+      $("pubTitle").addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          sendPublish(ev);
+        }
+      });
+    }
+    if ($("pubDlg")) {
+      $("pubDlg").addEventListener("close", () => { clearInterval(pubTimer); pubTimer = null; });
+      $("pubDlg").addEventListener("click", (ev) => { if (ev.target === $("pubDlg")) closePub(); });
+    }
   }
 
   // ------------------------------------------------------------------ estadisticas

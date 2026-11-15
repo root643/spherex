@@ -28,9 +28,12 @@
     }
     store.set("spherex.voter", voter);
   }
-  const owned = () => store.get("spherex.owned", {});
+  const owned = () => {
+    const o = store.get("spherex.owned", {});
+    return (o && typeof o === "object" && !Array.isArray(o)) ? o : {};
+  };
   function headers(extra) {
-    const tokens = Object.values(owned()).slice(-200).join(",");
+    const tokens = Object.values(owned()).filter(Boolean).slice(-200).join(",");
     return { "X-Voter": voter, ...(tokens ? { "X-Owner-Tokens": tokens } : {}), ...(extra || {}) };
   }
   async function api(path, opts = {}) {
@@ -102,10 +105,13 @@
   const pending = new Map();   // id -> temporizador de sondeo de las que se estan generando
 
   function card(p, full) {
-    const el = $("postTpl").content.firstElementChild.cloneNode(true);
+    const tpl = $("postTpl");
+    const el = (tpl.content && tpl.content.firstElementChild)
+      ? tpl.content.firstElementChild.cloneNode(true)
+      : (tpl.content ? tpl.content.children[0].cloneNode(true) : tpl.querySelector("article").cloneNode(true));
     el.dataset.id = p.id;
     if (full) el.classList.add("full");
-    const v = p.view;
+    const v = p.view || { ra: 0, dec: 0, fov: 240, band: "D1", mode: "blink", stretch: "asinh", speed: 500 };
 
     const a = el.querySelector(".post-title a");
     a.textContent = p.title; a.href = `#p/${p.id}`;

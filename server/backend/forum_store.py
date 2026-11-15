@@ -23,8 +23,8 @@ import tempfile
 import time
 
 FORUM_DIR = os.environ.get("SPHEREX_FORUM_DIR", "/var/lib/spherex/forum")
-POSTS_PER_HOUR = int(os.environ.get("SPHEREX_FORUM_POSTS_PER_HOUR", "6"))
-VOTERS_PER_NET = int(os.environ.get("SPHEREX_FORUM_VOTERS_PER_NET", "5"))
+POSTS_PER_HOUR = int(os.environ.get("SPHEREX_FORUM_POSTS_PER_HOUR", "30"))
+VOTERS_PER_NET = int(os.environ.get("SPHEREX_FORUM_VOTERS_PER_NET", "30"))
 STALE_SECONDS = 20 * 60          # una publicacion "procesando" mas vieja se da por fallida
 
 BANDS = re.compile(r"^(D[1-6]|ch([1-9]|[1-9][0-9]|10[0-2]))$")
