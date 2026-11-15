@@ -56,12 +56,15 @@ label output { color: var(--text); font-family: var(--mono); float: right; }
 .seg button:disabled { opacity: .35; cursor: not-allowed; }
 
 .viewer { min-width: 0; }
-.stage { position: relative; aspect-ratio: 1; width: 100%; max-width: min(100%, calc(100vh - 210px)); margin: 0 auto; background: #000; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; cursor: crosshair; }
+.stage { position: relative; aspect-ratio: 1; width: 100%; max-width: min(100%, calc(100vh - 210px)); margin: 0 auto; background: #000; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; cursor: crosshair; touch-action: none; }
 .stage img, .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .stage img { image-rendering: pixelated; user-select: none; transform-origin: 50% 50%; will-change: transform; }
 .stage img.panning { transition: transform .28s cubic-bezier(.2, .9, .3, 1); }
 .stage img:not([src]) { visibility: hidden; }
 .stage canvas { pointer-events: none; }
+.stage-zoom { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 6px; z-index: 15; }
+.stage-zoom button { width: 34px; height: 34px; border-radius: 50%; background: rgba(19, 23, 28, .85); backdrop-filter: blur(4px); border: 1px solid var(--line); color: var(--accent); font-size: 18px; font-weight: bold; display: flex; align-items: center; justify-content: center; padding: 0; box-shadow: 0 2px 6px rgba(0,0,0,.5); cursor: pointer; user-select: none; touch-action: manipulation; }
+.stage-zoom button:active { background: var(--accent); color: var(--accent-ink); transform: scale(.92); }
 .compass { position: absolute; left: 10px; bottom: 10px; font: 11px var(--mono); color: var(--accent); text-shadow: 0 0 3px #000; pointer-events: none; display: grid; grid-template-columns: auto auto; gap: 2px 4px; align-items: end; }
 .compass i { width: 1px; height: 22px; background: var(--accent); grid-row: 2; grid-column: 2; position: relative; }
 .compass i::after { content: ""; position: absolute; right: 0; bottom: 0; width: 22px; height: 1px; background: var(--accent); }
@@ -105,9 +108,23 @@ label output { color: var(--text); font-family: var(--mono); float: right; }
   .sed { grid-column: 1 / -1; }
 }
 @media (max-width: 700px) {
-  .layout { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: 1fr; padding: 8px; gap: 12px; }
   .viewer { order: -1; }
   .brand .sub { display: none; }
-  .stage { max-width: 100%; }
+  .top { padding: 8px 12px; gap: 8px; }
+  .search { width: 100%; min-width: 0; }
+  .stage { max-width: 100%; aspect-ratio: 1; border-radius: 8px; touch-action: none; }
+  .stage-zoom button { width: 38px; height: 38px; font-size: 20px; }
+  .transport { flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .transport button { height: 38px; width: 44px; font-size: 15px; }
+  .transport #scrub { flex: 1; min-width: 130px; height: 28px; }
+  .transport #frameLabel { min-width: auto; width: 100%; text-align: center; order: 5; margin-top: 2px; }
+  .readout { font-size: 11px; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+  .panel { padding: 10px; border-radius: 8px; }
+  .row2 { gap: 6px; }
+  input, select, button { min-height: 38px; font-size: 14px; }
+  .seg button { padding: 8px 4px; }
+  .chips button { padding: 6px 10px; font-size: 13px; }
+  .hint { font-size: 11px; line-height: 1.4; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

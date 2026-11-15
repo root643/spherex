@@ -90,6 +90,10 @@
   <section class="viewer" aria-label="Visor">
     <div id="stage" class="stage">
       <div id="viewerBuffer" class="buffer-wrap"><div class="buffer-fill"></div></div>
+      <div class="stage-zoom" aria-label="Controles de zoom">
+        <button id="zoomIn" type="button" title="Acercar (+)">+</button>
+        <button id="zoomOut" type="button" title="Alejar (−)">−</button>
+      </div>
       <img id="img" alt="Fotograma SPHEREx" draggable="false">
       <canvas id="overlay"></canvas>
       <div class="compass" aria-hidden="true"><span>N</span><i></i><span class="e">E</span></div>
@@ -106,7 +110,7 @@
       <span id="cursor">—</span>
       <span id="frameMeta"></span>
     </div>
-    <p class="hint">Clic: espectro en ese punto · Doble clic: centrar ahí · Espacio y flechas: reproducción.</p>
+    <p class="hint">Clic/toca: espectro · Arrastra: desplazar · Pellizca o +/−: zoom · Doble toque: centrar.</p>
   </section>
 
   <aside class="panel sed" aria-label="Espectro">
@@ -126,6 +130,6 @@
   <span id="stats">caché: —</span>
   <span>Datos: NASA/JPL-Caltech · IPAC/IRSA · <a href="/api/docs">API</a></span>
 </footer>
-<script src="app.js?v=9"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>

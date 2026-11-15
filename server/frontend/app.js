@@ -36,6 +36,18 @@
   let baseFov = state.fov;  // FOV de los fotogramas cargados en el visor
   let zoomDebounceTimer = null;
   let panOffset = { x: 0, y: 0 };
+  let clickTimer = null;
+  let spectrumAbortController = null;
+
+  function abortSpectrum() {
+    clearTimeout(clickTimer);
+    if (spectrumAbortController) {
+      spectrumAbortController.abort();
+      spectrumAbortController = null;
+      if (chartLoader) chartLoader.done("");
+      $("sedInfo").textContent = "Haz clic o toca sobre un objeto para analizar su espectro.";
+    }
+  }
 
   function applyVisualTransform() {
     const img = $("img");
@@ -73,6 +85,8 @@
   }
 
   function changeZoom(delta) {
+    clearTimeout(clickTimer);
+    abortSpectrum();
     const step = state.fov < 300 ? 30 : (state.fov < 900 ? 60 : 120);
     const nextFov = Math.max(60, Math.min(1800, state.fov + delta * step));
     if (nextFov !== state.fov) {
@@ -355,19 +369,223 @@
       if (ev.key === "-" || ev.key === "_") { ev.preventDefault(); changeZoom(1); }
     });
     const stage = $("stage");
+    let isTouching = false;
+    let isDragging = false;
+    let isPinching = false;
+    let touchStartX = 0, touchStartY = 0;
+    let startPanX = 0, startPanY = 0;
+    let initialPinchDist = 0;
+    let initialPinchFov = 0;
+    let lastTapTime = 0;
+    let lastTapPos = { x: 0, y: 0 };
+    let dragDebounceTimer = null;
+    let suppressClickUntil = 0;
+
+    // Ratón en desktop: arrastrar para desplazar
+    let isMouseDown = false;
+    let mouseStartX = 0, mouseStartY = 0;
+    let mouseMoved = false;
+
+    stage.addEventListener("mousedown", (ev) => {
+      if (ev.button !== 0) return;
+      if (performance.now() < suppressClickUntil) return;
+      isMouseDown = true;
+      mouseMoved = false;
+      mouseStartX = ev.clientX;
+      mouseStartY = ev.clientY;
+      startPanX = panOffset.x;
+      startPanY = panOffset.y;
+    });
+
     stage.addEventListener("mousemove", (ev) => {
       const s = skyAt(ev);
       $("cursor").textContent = s ? `RA ${s.ra.toFixed(5)}°  Dec ${s.dec >= 0 ? "+" : ""}${s.dec.toFixed(5)}°` : "—";
+      if (!isMouseDown) return;
+      const dx = ev.clientX - mouseStartX;
+      const dy = ev.clientY - mouseStartY;
+      if (!mouseMoved && Math.hypot(dx, dy) > 5) {
+        mouseMoved = true;
+        abortSpectrum();
+        stage.style.cursor = "grabbing";
+      }
+      if (mouseMoved) {
+        panOffset.x = startPanX + dx;
+        panOffset.y = startPanY + dy;
+        applyVisualTransform();
+      }
     });
-    let clickTimer = null;
+
+    const finishMouseDrag = () => {
+      if (!isMouseDown) return;
+      isMouseDown = false;
+      stage.style.cursor = "crosshair";
+      if (mouseMoved) {
+        suppressClickUntil = performance.now() + 350;
+        const r = stage.getBoundingClientRect();
+        const centerEv = { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
+        const newCenter = skyAt(centerEv);
+        if (newCenter) {
+          state.ra = +newCenter.ra.toFixed(5);
+          state.dec = +newCenter.dec.toFixed(5);
+          paintControls();
+          syncUrl();
+          clearTimeout(dragDebounceTimer);
+          dragDebounceTimer = setTimeout(() => reload({ recenterOnly: true }), 260);
+        }
+      }
+    };
+    stage.addEventListener("mouseup", finishMouseDrag);
+    stage.addEventListener("mouseleave", finishMouseDrag);
+
+    // Pantallas táctiles (móvil)
+    stage.addEventListener("touchstart", (ev) => {
+      if (ev.touches.length === 2) {
+        isPinching = true;
+        isDragging = false;
+        isTouching = false;
+        abortSpectrum();
+        initialPinchDist = Math.hypot(
+          ev.touches[0].clientX - ev.touches[1].clientX,
+          ev.touches[0].clientY - ev.touches[1].clientY
+        );
+        initialPinchFov = state.fov;
+        return;
+      }
+      if (ev.touches.length === 1) {
+        isTouching = true;
+        isDragging = false;
+        isPinching = false;
+        touchStartX = ev.touches[0].clientX;
+        touchStartY = ev.touches[0].clientY;
+        startPanX = panOffset.x;
+        startPanY = panOffset.y;
+      }
+    }, { passive: false });
+
+    stage.addEventListener("touchmove", (ev) => {
+      if (isPinching && ev.touches.length >= 2) {
+        ev.preventDefault();
+        abortSpectrum();
+        const dist = Math.hypot(
+          ev.touches[0].clientX - ev.touches[1].clientX,
+          ev.touches[0].clientY - ev.touches[1].clientY
+        );
+        if (dist > 10 && initialPinchDist > 0) {
+          const factor = initialPinchDist / dist;
+          const nextFov = Math.max(60, Math.min(1800, Math.round((initialPinchFov * factor) / 30) * 30));
+          if (nextFov !== state.fov) {
+            state.fov = nextFov;
+            paintControls();
+            syncUrl();
+            applyVisualTransform();
+          }
+        }
+        return;
+      }
+      if (isTouching && ev.touches.length === 1) {
+        const dx = ev.touches[0].clientX - touchStartX;
+        const dy = ev.touches[0].clientY - touchStartY;
+        const dist = Math.hypot(dx, dy);
+        if (!isDragging && dist > 7) {
+          isDragging = true;
+          abortSpectrum();
+        }
+        if (isDragging) {
+          ev.preventDefault();
+          panOffset.x = startPanX + dx;
+          panOffset.y = startPanY + dy;
+          applyVisualTransform();
+        }
+      }
+    }, { passive: false });
+
+    stage.addEventListener("touchend", (ev) => {
+      if (isPinching) {
+        if (ev.touches.length < 2) {
+          isPinching = false;
+          suppressClickUntil = performance.now() + 350;
+          clearTimeout(zoomDebounceTimer);
+          zoomDebounceTimer = setTimeout(() => reload({ zoomOnly: true }), 260);
+        }
+        return;
+      }
+      if (isDragging) {
+        isDragging = false;
+        isTouching = false;
+        suppressClickUntil = performance.now() + 350;
+        const r = stage.getBoundingClientRect();
+        const centerEv = { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
+        const newCenter = skyAt(centerEv);
+        if (newCenter) {
+          state.ra = +newCenter.ra.toFixed(5);
+          state.dec = +newCenter.dec.toFixed(5);
+          paintControls();
+          syncUrl();
+          clearTimeout(dragDebounceTimer);
+          dragDebounceTimer = setTimeout(() => reload({ recenterOnly: true }), 260);
+        }
+        return;
+      }
+      if (isTouching) {
+        isTouching = false;
+        const touch = ev.changedTouches[0];
+        if (!touch) return;
+        const now = performance.now();
+        const tapDist = Math.hypot(touch.clientX - lastTapPos.x, touch.clientY - lastTapPos.y);
+
+        if (now - lastTapTime < 320 && tapDist < 30) {
+          // Doble toque: centrado suave
+          abortSpectrum();
+          lastTapTime = 0;
+          suppressClickUntil = performance.now() + 350;
+          const s = skyAt({ clientX: touch.clientX, clientY: touch.clientY });
+          if (s) {
+            const r = stage.getBoundingClientRect();
+            const clickX = touch.clientX - r.left;
+            const clickY = touch.clientY - r.top;
+            const targetTx = r.width / 2 - clickX;
+            const targetTy = r.height / 2 - clickY;
+            state.ra = +s.ra.toFixed(5);
+            state.dec = +s.dec.toFixed(5);
+            marker = s;
+            paintControls();
+            syncUrl();
+            animateRecenter(targetTx, targetTy);
+            reload({ recenterOnly: true });
+          }
+        } else {
+          // Toque simple: seleccionar estrella para 102 bandas
+          lastTapTime = now;
+          lastTapPos = { x: touch.clientX, y: touch.clientY };
+          const s = skyAt({ clientX: touch.clientX, clientY: touch.clientY });
+          if (s) {
+            suppressClickUntil = performance.now() + 350;
+            abortSpectrum();
+            clickTimer = setTimeout(() => {
+              marker = s;
+              drawOverlay();
+              loadSpectrum(s.ra, s.dec);
+            }, 240);
+          }
+        }
+      }
+    }, { passive: false });
+
     stage.addEventListener("click", (ev) => {
+      if (performance.now() < suppressClickUntil) return;
       const s = skyAt(ev);
       if (!s) return;
-      clearTimeout(clickTimer);
-      clickTimer = setTimeout(() => { marker = s; drawOverlay(); loadSpectrum(s.ra, s.dec); }, 230);
+      abortSpectrum();
+      clickTimer = setTimeout(() => {
+        marker = s;
+        drawOverlay();
+        loadSpectrum(s.ra, s.dec);
+      }, 240);
     });
+
     stage.addEventListener("dblclick", (ev) => {
-      clearTimeout(clickTimer);
+      abortSpectrum();
+      suppressClickUntil = performance.now() + 350;
       const s = skyAt(ev);
       if (!s) return;
       const r = stage.getBoundingClientRect();
@@ -376,53 +594,32 @@
       const targetTx = r.width / 2 - clickX;
       const targetTy = r.height / 2 - clickY;
 
-      // 1. Actualizar coordenadas y marcador sobre la estrella seleccionada
       state.ra = +s.ra.toFixed(5);
       state.dec = +s.dec.toFixed(5);
       marker = s;
       paintControls();
       syncUrl();
-
-      // 2. Transicion visual instantanea y suave (deslizamiento al centro de 280ms)
       animateRecenter(targetTx, targetTy);
-
-      // 3. Cargar el fotograma astrometrico real centrado sin pantalla negra
       reload({ recenterOnly: true });
     });
+
     stage.addEventListener("wheel", (ev) => {
       ev.preventDefault();
+      abortSpectrum();
       changeZoom(Math.sign(ev.deltaY));
     }, { passive: false });
 
-    let touchDist0 = null, touchFov0 = null;
-    stage.addEventListener("touchstart", (ev) => {
-      if (ev.touches.length === 2) {
-        touchDist0 = Math.hypot(ev.touches[0].clientX - ev.touches[1].clientX, ev.touches[0].clientY - ev.touches[1].clientY);
-        touchFov0 = state.fov;
-      }
-    }, { passive: true });
-    stage.addEventListener("touchmove", (ev) => {
-      if (ev.touches.length === 2 && touchDist0) {
-        const dist = Math.hypot(ev.touches[0].clientX - ev.touches[1].clientX, ev.touches[0].clientY - ev.touches[1].clientY);
-        if (dist > 10) {
-          const factor = touchDist0 / dist;
-          const nextFov = Math.max(60, Math.min(1800, Math.round((touchFov0 * factor) / 30) * 30));
-          if (nextFov !== state.fov) {
-            state.fov = nextFov;
-            $("fov").value = state.fov;
-            $("fovOut").textContent = state.fov + "″ (" + (state.fov / 60).toFixed(1) + "′)";
-            applyVisualZoom(baseFov / state.fov);
-          }
-        }
-      }
-    }, { passive: true });
-    stage.addEventListener("touchend", (ev) => {
-      if (touchDist0 && ev.touches.length < 2) {
-        touchDist0 = null;
-        clearTimeout(zoomDebounceTimer);
-        zoomDebounceTimer = setTimeout(() => reload({ zoomOnly: true }), 260);
-      }
-    }, { passive: true });
+    $("zoomIn").onclick = (e) => {
+      e.stopPropagation();
+      abortSpectrum();
+      changeZoom(-1);
+    };
+    $("zoomOut").onclick = (e) => {
+      e.stopPropagation();
+      abortSpectrum();
+      changeZoom(1);
+    };
+
     new ResizeObserver(drawOverlay).observe(stage);
   }
 
@@ -701,11 +898,13 @@
   // ------------------------------------------------------------------ geometria (TAN)
   const D2R = Math.PI / 180;
   function skyAt(ev) {
-    if (!grid.size || state.ra == null) return null;
+    if (!grid.size || state.ra == null || !ev) return null;
     const r = $("stage").getBoundingClientRect();
     const zoomRatio = (baseFov && state.fov) ? (baseFov / state.fov) : 1;
-    const fx = ((ev.clientX - r.left - panOffset.x) / r.width - 0.5) / zoomRatio;
-    const fy = ((ev.clientY - r.top - panOffset.y) / r.height - 0.5) / zoomRatio;
+    const cx = ev.clientX != null ? ev.clientX : (ev.touches && ev.touches[0] ? ev.touches[0].clientX : (ev.changedTouches && ev.changedTouches[0] ? ev.changedTouches[0].clientX : 0));
+    const cy = ev.clientY != null ? ev.clientY : (ev.touches && ev.touches[0] ? ev.touches[0].clientY : (ev.changedTouches && ev.changedTouches[0] ? ev.changedTouches[0].clientY : 0));
+    const fx = ((cx - r.left - panOffset.x) / r.width - 0.5) / zoomRatio;
+    const fy = ((cy - r.top - panOffset.y) / r.height - 0.5) / zoomRatio;
     const span = grid.size * grid.scale / 3600 * D2R;       // ancho total en radianes
     const xi = -fx * span, eta = -fy * span;                // este a la izquierda, norte arriba
     const rho = Math.hypot(xi, eta), d0 = state.dec * D2R;
@@ -744,18 +943,31 @@
 
   // ------------------------------------------------------------------ espectro
   async function loadSpectrum(ra, dec) {
+    abortSpectrum();
+    const controller = new AbortController();
+    spectrumAbortController = controller;
     if (chartLoader) chartLoader.start(`Midiendo 102 canales en ${ra.toFixed(4)}°, ${dec.toFixed(4)}°`);
     drawChartLoading(`Midiendo 102 canales en ${ra.toFixed(4)}°, ${dec.toFixed(4)}°…`);
     $("diag").textContent = "";
     try {
-      const s = await getJson(`${API}/spectrum?ra=${ra.toFixed(5)}&dec=${dec.toFixed(5)}`);
+      const res = await fetch(`${API}/spectrum?ra=${ra.toFixed(5)}&dec=${dec.toFixed(5)}`, { signal: controller.signal });
+      if (!res.ok) throw new Error(await errText(res));
+      const s = await res.json();
+      if (controller.signal.aborted) return;
       if (chartLoader) chartLoader.done(`${s.n_exposures} exposiciones · apertura r = ${s.aperture_radius_px} px · ${ra.toFixed(5)}°, ${dec.toFixed(5)}°`);
       drawChart(s);
       const fmt = (v) => (v == null ? "sin datos" : (v * 100).toFixed(1) + " %");
       $("diag").innerHTML = `<dt>Hielo de agua (3,05 µm)</dt><dd>${fmt(s.diagnostics["h2o_ice_3.05um_depth"])}</dd>` +
         `<dt>CO₂ (4,27 µm)</dt><dd>${fmt(s.diagnostics["co2_4.27um_depth"])}</dd>`;
     } catch (e) {
+      if (e.name === "AbortError" || controller.signal.aborted) {
+        return; // Silencioso: usuario priorizó desplazamiento o zoom
+      }
       if (chartLoader) chartLoader.fail(e.message); else $("sedInfo").textContent = e.message;
+    } finally {
+      if (spectrumAbortController === controller) {
+        spectrumAbortController = null;
+      }
     }
   }
 
